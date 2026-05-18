@@ -1,0 +1,117 @@
+-- Dashboard Rechazos Comerciales — Misiones
+-- Esquema unificado para rechazos de Chess ERP + GESCOM.
+
+CREATE TABLE IF NOT EXISTS rechazos (
+    id                BIGSERIAL PRIMARY KEY,
+    fuente            TEXT NOT NULL CHECK (fuente IN ('CHESS', 'GESCOM')),
+    fecha             DATE NOT NULL,
+    comprobante       TEXT,
+    ds_documento      TEXT,
+    id_pedido         TEXT,
+    motivo_codigo     TEXT,
+    motivo            TEXT NOT NULL DEFAULT 'SIN MOTIVO',
+    id_supervisor     TEXT,
+    supervisor        TEXT NOT NULL DEFAULT 'SIN SUPERVISOR',
+    id_vendedor       TEXT,
+    vendedor          TEXT NOT NULL DEFAULT 'SIN PROMOTOR',
+    id_ruta           TEXT,
+    ruta              TEXT NOT NULL DEFAULT 'SIN RUTA',
+    dias_visita       TEXT NOT NULL DEFAULT '',
+    id_cliente        TEXT,
+    cliente           TEXT NOT NULL DEFAULT 'SIN CLIENTE',
+    localidad         TEXT,
+    domicilio         TEXT,
+    id_articulo       TEXT,
+    articulo          TEXT NOT NULL DEFAULT 'SIN ARTICULO',
+    canal             TEXT,
+    origen            TEXT,
+    transporte        TEXT,
+    excluido          BOOLEAN NOT NULL DEFAULT false,
+    motivo_exclusion  TEXT NOT NULL DEFAULT '',
+    bultos_rechazados NUMERIC NOT NULL DEFAULT 0,
+    importe_rechazado NUMERIC NOT NULL DEFAULT 0,
+    raw               JSONB,
+    linea_key         TEXT NOT NULL,
+    synced_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (fuente, fecha, linea_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_rechazos_fecha       ON rechazos (fecha);
+CREATE INDEX IF NOT EXISTS idx_rechazos_fuente_fec  ON rechazos (fuente, fecha);
+CREATE INDEX IF NOT EXISTS idx_rechazos_supervisor  ON rechazos (supervisor);
+CREATE INDEX IF NOT EXISTS idx_rechazos_vendedor    ON rechazos (vendedor);
+CREATE INDEX IF NOT EXISTS idx_rechazos_ruta        ON rechazos (ruta);
+CREATE INDEX IF NOT EXISTS idx_rechazos_cliente     ON rechazos (id_cliente);
+CREATE INDEX IF NOT EXISTS idx_rechazos_articulo    ON rechazos (id_articulo);
+CREATE INDEX IF NOT EXISTS idx_rechazos_excluido    ON rechazos (excluido);
+
+-- Referencia: cliente -> ruta / promotor / localidad.
+-- Resuelve las dimensiones "ruta" y "promotor". Para GESCOM es imprescindible:
+-- el codigoVendedor de la venta es el operador de mostrador, NO el promotor
+-- real del cliente, que se toma de su ruta de preventa.
+CREATE TABLE IF NOT EXISTS ref_clientes (
+    fuente      TEXT NOT NULL,
+    id_cliente  TEXT NOT NULL,
+    nombre      TEXT,
+    id_ruta     TEXT,
+    ds_ruta     TEXT,
+    dias_visita TEXT NOT NULL DEFAULT '',
+    id_promotor TEXT,
+    localidad   TEXT,
+    direccion   TEXT,
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (fuente, id_cliente)
+);
+
+-- Atención del cliente en Chess (supervisor + promotor), indexada por nombre
+-- normalizado. Se arma con los comprobantes de Chess (que traen cliente +
+-- supervisor + vendedor) y sirve para asignar supervisor y promotor a los
+-- rechazos de GESCOM matcheando el cliente por nombre.
+CREATE TABLE IF NOT EXISTS ref_cliente_supervisor (
+    nombre_norm  TEXT PRIMARY KEY,
+    supervisor   TEXT NOT NULL,
+    vendedor     TEXT,
+    id_cliente   TEXT,
+    ultima_fecha DATE,
+    updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Referencia: articulos (necesario para los nombres de SKU de GESCOM).
+CREATE TABLE IF NOT EXISTS ref_articulos (
+    fuente      TEXT NOT NULL,
+    id_articulo TEXT NOT NULL,
+    descripcion TEXT,
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (fuente, id_articulo)
+);
+
+-- Mapeo manual vendedor -> supervisor. GESCOM no expone el supervisor en su
+-- API; un admin puede cargar filas aca para que el sync resuelva GESCOM.
+CREATE TABLE IF NOT EXISTS ref_vendedor_supervisor (
+    fuente      TEXT NOT NULL,
+    id_vendedor TEXT NOT NULL,
+    supervisor  TEXT NOT NULL,
+    PRIMARY KEY (fuente, id_vendedor)
+);
+
+-- Mapeo manual cliente -> supervisor (apartado de administracion del tablero).
+-- Tiene prioridad sobre la resolucion automatica. Sirve para asignar el
+-- supervisor a rechazos de GESCOM cuyo cliente no matchea con el listado Chess.
+CREATE TABLE IF NOT EXISTS cliente_supervisor_manual (
+    nombre_norm TEXT PRIMARY KEY,
+    cliente     TEXT NOT NULL,
+    vendedor    TEXT NOT NULL DEFAULT '',
+    supervisor  TEXT NOT NULL DEFAULT '',
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS sync_log (
+    id         BIGSERIAL PRIMARY KEY,
+    fuente     TEXT,
+    fecha      DATE,
+    filas      INTEGER DEFAULT 0,
+    estado     TEXT,
+    detalle    TEXT,
+    started_at TIMESTAMPTZ DEFAULT now(),
+    ended_at   TIMESTAMPTZ
+);

@@ -1,0 +1,17 @@
+# Dependencias
+node_modules/
+venv/
+.venv/
+__pycache__/
+*.pyc
+
+# Build
+dist/
+
+# Entornos / secretos
+.env
+.env.*
+!.env.example
+
+# Vercel
+.vercel

@@ -90,17 +90,32 @@ def cron_sync(
 @router.post("/refrescar")
 def refrescar_sync(
     dias: int = Query(7, ge=1, le=31, description="ventana movil de dias hacia atras"),
+    desde: Optional[str] = Query(None, description="yyyy-MM-dd; con `hasta`, sincroniza ese rango"),
+    hasta: Optional[str] = Query(None, description="yyyy-MM-dd"),
 ):
-    """Sync de la ventana reciente disparado desde el boton de la UI.
+    """Sync disparado desde el boton de la UI.
 
     Sin secreto, igual que `/api/mapeo`: se protege a nivel Vercel. No
-    refresca referencias (eso tarda ~3 min); solo trae rechazos recientes.
+    refresca referencias (eso tarda ~3 min); solo trae rechazos.
+
+    Por defecto sincroniza la ventana movil de `dias` hacia atras. Si llegan
+    `desde` y `hasta`, sincroniza ese rango (el periodo elegido en los
+    filtros). El rango se limita a 45 dias: para backfills mas largos hay que
+    usar /run, que responde en streaming y no se corta a los ~300s de Vercel.
     """
-    desde = (date.today() - timedelta(days=dias)).isoformat()
-    hasta = date.today().isoformat()
-    total = sync_rango(desde, hasta, ["CHESS", "GESCOM"])
-    log.info("Refrescar (UI) %s..%s -> %s", desde, hasta, total)
-    return {"ok": True, "desde": desde, "hasta": hasta, "rechazos": total}
+    if desde and hasta:
+        d, h = desde, hasta
+        if (date.fromisoformat(h) - date.fromisoformat(d)).days > 45:
+            raise HTTPException(
+                status_code=400,
+                detail="Rango mayor a 45 dias: usar el sync manual por tramos.",
+            )
+    else:
+        d = (date.today() - timedelta(days=dias)).isoformat()
+        h = date.today().isoformat()
+    total = sync_rango(d, h, ["CHESS", "GESCOM"])
+    log.info("Refrescar (UI) %s..%s -> %s", d, h, total)
+    return {"ok": True, "desde": d, "hasta": h, "rechazos": total}
 
 
 @router.post("/referencias")

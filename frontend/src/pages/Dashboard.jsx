@@ -132,7 +132,13 @@ export default function Dashboard() {
           <div className="sub">Repaso de rutas y clientes críticos</div>
         </div>
         <div className="topbar-acciones">
-          <BotonSync onDone={trasSync} />
+          <BotonSync
+            onDone={trasSync}
+            periodo={{
+              desde: filtros.fecha_desde,
+              hasta: filtros.fecha_hasta,
+            }}
+          />
           <MenuConfig
             fuente={filtros.fuente}
             onFuente={setFuente}

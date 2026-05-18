@@ -39,9 +39,10 @@ export const api = {
   rechazos: (filtros) => get("/api/rechazos", filtros),
   filtros: (params) => get("/api/filtros", params),
   syncEstado: () => get("/api/sync/estado"),
-  // Dispara un sync de la ventana reciente desde el boton de la UI.
-  refrescarSync: (dias) =>
-    req("POST", "/api/sync/refrescar", { params: { dias } }),
+  // Sync desde el boton de la UI. `params` = { dias } para la ventana movil
+  // reciente, o { desde, hasta } para sincronizar un rango concreto.
+  refrescarSync: (params) =>
+    req("POST", "/api/sync/refrescar", { params }),
   // Mapeo manual de clientes a supervisores.
   mapeo: () => get("/api/mapeo"),
   guardarMapeo: (cliente, vendedor) =>

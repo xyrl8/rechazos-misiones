@@ -10,8 +10,9 @@ rechazos de productos de **Chess ERP + GESCOM**, segmentables por supervisor,
 promotor, cliente, ruta y SKU, con toggle CHESS / GESCOM / TODO. El foco es
 detectar **clientes y rutas críticas** para encarar al cliente.
 
-⚠️ Proyecto de **Misiones** → dueño **Enzo Orsetti**. Cuenta Vercel/GitHub de
-Enzo (`enzoorsetti27-stars-projects`), NO la cuenta empresa `mercosurdrp`.
+Proyecto de **Misiones** (stakeholder operativo: **Enzo Orsetti**). Deployado en
+la cuenta empresa **`mercosurdrp`**: GitHub `mercosurdrp/rechazos-misiones`,
+Vercel team `mercosurdrps-projects`. Ver `HANDOFF.md`.
 
 ## Stack
 
@@ -103,9 +104,16 @@ no duplica.
 - `GET /api/resumen` — KPIs + cortes por cada dimensión + clientes críticos + tendencia.
 - `GET /api/rechazos` — detalle paginado.
 - `GET /api/filtros` — valores distintos para los selectores.
-- `GET /api/sync/estado` — última corrida y cobertura de datos.
+- `GET /api/sync/estado` — última corrida, cobertura de datos y conteo de
+  `ref_clientes`/`ref_articulos`.
 - `POST /api/sync`, `POST /api/sync/referencias`, `GET /api/sync/cron`,
   `POST /api/sync/refrescar`.
+- `POST /api/sync/init-db` — aplica `schema.sql` (idempotente). Inicializa la
+  base productiva tras el primer deploy. Protegido por `SYNC_SECRET`.
+- `POST /api/sync/run` — sync con respuesta en **streaming** (emite heartbeats):
+  Vercel corta las respuestas no-streaming a ~300s; este endpoint mantiene viva
+  la conexión hasta el límite de 800s de la función. Acepta `referencias`,
+  `desde`, `hasta`, `fuentes`.
 - `GET/POST/DELETE /api/mapeo` — mapeo manual cliente→supervisor.
 
 Filtros comunes: `fuente` (CHESS/GESCOM/TODO), `fecha_desde`, `fecha_hasta`,
@@ -114,6 +122,24 @@ Filtros comunes: `fuente` (CHESS/GESCOM/TODO), `fecha_desde`, `fecha_hasta`,
 
 ## Deploy
 
-Backend y frontend son proyectos Vercel separados (cuenta de Enzo). Ver
-`HANDOFF.md` para el checklist completo (DB Neon, env vars, CRON_SECRET, CORS,
+Backend y frontend son proyectos Vercel separados, ambos en el team
+`mercosurdrps-projects` (cuenta empresa `mercosurdrp`), desde el repo
+`mercosurdrp/rechazos-misiones`:
+
+- frontend `rechazos-misiones` → `https://rechazos-misiones.vercel.app` (rootDir
+  `frontend`, framework Vite).
+- backend `rechazos-misiones-api` → `https://rechazos-misiones-api.vercel.app`
+  (rootDir `backend`).
+
+🚨 **El backend DEBE correr en la región `gru1` (São Paulo).** Desde la default
+`iad1` (Virginia) las llamadas a Chess ERP son lentísimas y el sync de
+referencias muere por `FUNCTION_INVOCATION_TIMEOUT`. Configurado en el
+`resourceConfig` del proyecto: `functionDefaultRegions=["gru1"]`,
+`functionDefaultTimeout=800`.
+
+DB: PostgreSQL de **Neon**, conectada vía Storage de Vercel. `DATABASE_URL` se
+inyecta como integration-secret (solo existe en runtime: no se puede leer por la
+API de Vercel ni por `vercel env pull`).
+
+Ver `HANDOFF.md` para el checklist completo (env vars, CRON_SECRET, CORS,
 `VITE_API_URL` al alias estable del backend).

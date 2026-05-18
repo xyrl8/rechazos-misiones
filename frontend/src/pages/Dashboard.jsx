@@ -6,7 +6,6 @@ import MenuConfig from "../components/MenuConfig.jsx";
 import Filtros from "../components/Filtros.jsx";
 import KpiCards from "../components/KpiCards.jsx";
 import PanelSegmento from "../components/PanelSegmento.jsx";
-import ClientesCriticos from "../components/ClientesCriticos.jsx";
 import TablaRechazos from "../components/TablaRechazos.jsx";
 import ModalMapeo from "../components/ModalMapeo.jsx";
 
@@ -164,13 +163,18 @@ export default function Dashboard() {
         </div>
       ) : resumen ? (
         <>
-          <KpiCards kpis={resumen.kpis} />
+          <KpiCards
+            kpis={resumen.kpis}
+            porMotivo={resumen.por_motivo}
+            porLocalidad={resumen.por_localidad}
+          />
 
-          <ClientesCriticos
-            data={resumen.clientes_criticos}
-            periodo={resumen.clientes_criticos_periodo}
+          <TablaRechazos
+            data={detalle}
+            criticos={resumen.clientes_criticos}
+            periodoCriticidad={resumen.clientes_criticos_periodo}
             seleccion={filtros.cliente}
-            onSelect={(v) => setCampo("cliente", v)}
+            onSelectCliente={(v) => setCampo("cliente", v)}
           />
 
           <div className="grid">
@@ -195,8 +199,6 @@ export default function Dashboard() {
               onSelect={(v) => setCampo("motivo", v)}
             />
           </div>
-
-          <TablaRechazos data={detalle} />
         </>
       ) : null}
 

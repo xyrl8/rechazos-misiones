@@ -139,10 +139,14 @@ def resumen(
         por_ruta = corte("ruta", 25)
         por_motivo = corte("motivo")
         por_articulo = corte("articulo", 20)
+        por_localidad = corte("localidad")
 
         # "veces" = cantidad de dias distintos en que el cliente rechazo. Es el
         # criterio de criticidad (varios comprobantes el mismo dia cuentan 1).
-        # Se calcula sobre la ventana cc (>= 30 dias), no el periodo del filtro.
+        # Se calcula sobre la ventana cc (>= 15 dias), no el periodo del filtro.
+        # Sin LIMIT: la tabla de detalle fusionada cruza por id_cliente y
+        # necesita el `veces` de TODO cliente con rechazo, no solo el ranking
+        # superior. El payload es chico (una fila por cliente).
         cur.execute(f"""
             SELECT id_cliente, cliente, ruta, vendedor, supervisor, localidad,
                    COUNT(DISTINCT fecha) veces,
@@ -153,8 +157,7 @@ def resumen(
                    (ARRAY_AGG(motivo ORDER BY fecha DESC))[1] ultimo_motivo
             FROM rechazos{clause_cc}
             GROUP BY id_cliente, cliente, ruta, vendedor, supervisor, localidad
-            ORDER BY veces DESC, importe DESC
-            LIMIT 60""", params_cc)
+            ORDER BY veces DESC, importe DESC""", params_cc)
         clientes_criticos = cur.fetchall()
 
         cur.execute(f"""
@@ -174,6 +177,7 @@ def resumen(
             "por_ruta": por_ruta,
             "por_motivo": por_motivo,
             "por_articulo": por_articulo,
+            "por_localidad": por_localidad,
             "clientes_criticos": clientes_criticos,
             "clientes_criticos_periodo": {"desde": cc_desde.isoformat(),
                                           "hasta": cc_hasta.isoformat()},
@@ -267,6 +271,13 @@ def sync_estado():
         ultimas = cur.fetchall()
         cur.execute("SELECT MAX(fecha) maxf, MIN(fecha) minf, COUNT(*) total FROM rechazos")
         cobertura = cur.fetchone()
-        return {"ultimas_corridas": ultimas, "cobertura": cobertura}
+        cur.execute("""
+            SELECT fuente, COUNT(*) n FROM ref_clientes GROUP BY fuente""")
+        ref_clientes = {r["fuente"]: r["n"] for r in cur.fetchall()}
+        cur.execute("SELECT COUNT(*) n FROM ref_articulos")
+        ref_articulos = cur.fetchone()["n"]
+        return {"ultimas_corridas": ultimas, "cobertura": cobertura,
+                "referencias": {"clientes": ref_clientes,
+                                "articulos": ref_articulos}}
     finally:
         conn.close()

@@ -43,6 +43,21 @@ GESCOM_CLIENTE_EXCLUIR_KEYWORDS = ("ESPECIAL",)
 PROMOTOR_EXCLUIR = {"VI ELDO", "MOSTRADOR IGUAZU", "MOSTRADOR ELDORADO",
                     "MOSTRADOR 100", "VI PEOPLE", "VI MD"}
 
+def _normaliza_motivo(motivo: str) -> str:
+    """Quita el prefijo de la app BEES ("BEES - XXX" -> "XXX").
+
+    Es el mismo motivo de negocio aunque BEES lo etiquete con su prefijo: al
+    sacarlo, se unifica con el mismo motivo cargado desde otros orígenes.
+    """
+    m = (motivo or "").strip()
+    if m.upper().startswith("BEES"):
+        resto = m[4:].lstrip()
+        if resto.startswith("-"):
+            resto = resto[1:].strip()
+            if resto:
+                m = resto
+    return m
+
 
 def _razon_exclusion(motivo: str, transporte: str, vendedor: str = "") -> str:
     """Devuelve la razón de exclusión ('' = no excluido).
@@ -249,7 +264,7 @@ def _chess_rows(comprobantes: List[dict], clientes: dict, vend_sup: dict) -> Lis
             "ds_documento": _txt(c.get("dsDocumento")),
             "id_pedido": _txt(c.get("idPedido")),
             "motivo_codigo": _txt(c.get("idRechazo")),
-            "motivo": motivo or "SIN MOTIVO",
+            "motivo": _normaliza_motivo(motivo) or "SIN MOTIVO",
             "id_supervisor": _txt(c.get("idSupervisor")),
             "supervisor": supervisor,
             "id_vendedor": idvend,
@@ -323,7 +338,7 @@ def _gescom_rows(ventas: List[dict], clientes: dict, articulos: dict,
                 "ds_documento": _txt(v.get("codigoTipoVenta")),
                 "id_pedido": _txt(v.get("id")),
                 "motivo_codigo": _txt(v.get("codigoMotivoCambio")),
-                "motivo": motivo,
+                "motivo": _normaliza_motivo(motivo),
                 "id_supervisor": "",
                 "supervisor": supervisor,
                 "id_vendedor": idvend,

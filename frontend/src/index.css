@@ -12,6 +12,7 @@
   --ok: #1f9d6b;
   --chess: #2f4cdd;
   --gescom: #c97a12;
+  --localidad: #7b41d8;
   --shadow: 0 1px 3px rgba(20, 28, 51, 0.08), 0 1px 2px rgba(20, 28, 51, 0.06);
   font-synthesis: none;
 }
@@ -147,6 +148,74 @@ button {
   min-width: 130px;
 }
 
+/* Selector con búsqueda (clientes) */
+.combo {
+  position: relative;
+}
+
+.combo input {
+  width: 100%;
+  min-width: 200px;
+}
+
+.combo-clear {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  border: 0;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  padding: 0 2px;
+  min-width: 0;
+}
+
+.combo-clear:hover {
+  color: var(--danger);
+}
+
+.combo-pop {
+  position: absolute;
+  top: calc(100% + 3px);
+  left: 0;
+  z-index: 30;
+  width: 290px;
+  max-width: 80vw;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  max-height: 250px;
+  overflow-y: auto;
+}
+
+.combo-opt {
+  padding: 6px 9px;
+  font-size: 12.5px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.combo-opt:hover {
+  background: var(--brand-soft);
+}
+
+.combo-opt.sel {
+  background: var(--brand-soft);
+  font-weight: 700;
+}
+
+.combo-vacio {
+  padding: 8px 9px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
 .quick {
   display: flex;
   gap: 6px;
@@ -167,6 +236,12 @@ button {
 .btn-clear:hover {
   border-color: var(--brand);
   color: var(--brand);
+}
+
+.quick button.activo {
+  border-color: var(--brand);
+  background: var(--brand);
+  color: #fff;
 }
 
 .btn-clear {
@@ -248,6 +323,46 @@ button {
 .kpi.b-bultos {
   border-left-color: var(--ok);
 }
+.kpi.b-localidad {
+  border-left-color: var(--localidad);
+}
+
+/* Las tarjetas "Principal motivo" y "Localidad crítica" muestran texto, no un
+   número: el valor va más chico y puede ocupar dos líneas. */
+.kpi.b-motivo .value,
+.kpi.b-localidad .value {
+  font-size: 17px;
+  line-height: 1.2;
+  letter-spacing: 0;
+  margin-top: 5px;
+}
+
+/* Detalle del "Principal motivo": dos filas alineadas por el "|" central. */
+.hint-grid {
+  display: grid;
+  /* Columnas ajustadas al contenido (no 1fr): el "|" queda pegado al texto
+     más largo de cada lado, sin huecos. El bloque va pegado a la izquierda. */
+  grid-template-columns: auto auto auto;
+  justify-content: start;
+  column-gap: 6px;
+  row-gap: 1px;
+}
+
+.hint-grid .hg-izq {
+  text-align: right;
+}
+/* Solo la primera fila arranca pegada al borde izquierdo; la segunda queda
+   pegada al "|", alineada verticalmente con el resto. */
+.hint-grid .hg-izq.first {
+  text-align: left;
+}
+.hint-grid .hg-sep {
+  text-align: center;
+  opacity: 0.55;
+}
+.hint-grid .hg-der {
+  text-align: left;
+}
 
 /* ---------- Grilla de paneles ---------- */
 .grid {
@@ -278,6 +393,28 @@ button {
   font-size: 11px;
   color: var(--muted);
   font-weight: 600;
+}
+
+.panel h3 .h3-titulo {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* Flechita del encabezado: muestra/oculta el resto de grupos (igual que el
+   botón "ver más" del final de la tabla). */
+.btn-toggle-todos {
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  color: var(--brand);
+  font-size: 12px;
+  line-height: 1;
+}
+
+.btn-toggle-todos:hover {
+  color: var(--ink);
 }
 
 .seg-head {
@@ -396,6 +533,13 @@ button {
 /* ---------- Tabla ---------- */
 .tabla-wrap {
   overflow-x: auto;
+}
+
+/* Anchos de columna fijos: evita que las columnas salten al desplegar más
+   grupos o el detalle de SKU. Si el panel es angosto, hay scroll horizontal. */
+.tabla-wrap table {
+  table-layout: fixed;
+  min-width: 1080px;
 }
 
 table {
@@ -641,6 +785,30 @@ th.num {
 .nivel-tag.ocasional {
   background: var(--bg);
   color: var(--muted);
+}
+
+/* ---------- Cliente clickeable en la tabla de detalle ---------- */
+.cliente-link {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  font-weight: 700;
+  color: var(--brand);
+  cursor: pointer;
+  text-align: left;
+}
+
+.cliente-link:hover {
+  text-decoration: underline;
+}
+
+.grupo-row.sel td {
+  background: var(--danger-soft);
+}
+
+.grupo-row.sel:hover td {
+  background: var(--danger-soft);
 }
 
 /* ---------- Estados ---------- */

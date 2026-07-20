@@ -93,6 +93,11 @@ export default function TablaRechazos({
   const idx = useMemo(() => indiceCriticidad(criticos), [criticos]);
   const u = useMemo(() => umbrales(periodoCriticidad), [periodoCriticidad]);
 
+  // El backend pagina el detalle: si no llegaron todas las lineas del periodo,
+  // ordenar por cualquier columna ordena solo el pedazo traido. Hay que
+  // avisarlo o el ranking (sobre todo el de importe) se lee como completo.
+  const truncado = total > rows.length;
+
   const grupos = useMemo(() => {
     const map = new Map();
     for (const r of rows) {
@@ -184,6 +189,14 @@ export default function TablaRechazos({
           {num(grupos.length)} grupos · {num(rows.length)} de {num(total)} líneas
         </span>
       </h3>
+      {truncado && (
+        <div className="aviso-truncado">
+          ⚠️ Se cargaron <b>{num(rows.length)}</b> de <b>{num(total)}</b> líneas
+          del período. El orden de las columnas se aplica solo sobre las
+          cargadas (las más recientes), así que <b>faltan rechazos de los días
+          más viejos</b>. Acortá el período para ver el ranking completo.
+        </div>
+      )}
       <div className="leyenda">
         <b>Nivel</b> y <b>recurrencia</b> son del cliente sobre la ventana de
         criticidad (mínimo últimos 15 días); <b>bultos</b> e <b>importe</b> son

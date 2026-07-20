@@ -763,6 +763,19 @@ th.num {
   margin-bottom: 8px;
 }
 
+/* Detalle truncado por la paginacion del backend: el orden de las columnas
+   solo aplica sobre lo cargado, hay que cantarlo. */
+.aviso-truncado {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--warn);
+  background: #fdf4e6;
+  border: 1px solid #f0dcc0;
+  border-radius: 7px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+}
+
 .nivel-tag {
   display: inline-block;
   font-size: 9.5px;

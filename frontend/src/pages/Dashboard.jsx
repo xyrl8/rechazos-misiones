@@ -56,7 +56,13 @@ export default function Dashboard() {
     let cancel = false;
     setLoading(true);
     setError("");
-    Promise.all([api.resumen(filtros), api.rechazos({ ...filtros, limit: 800 })])
+    // El detalle se agrupa y se ordena en el navegador (por fecha+cliente), asi
+    // que necesita TODAS las lineas del periodo: si el backend trunca, ordenar
+    // por importe ordena solo el pedazo traido (que viene por fecha DESC) y
+    // deja afuera los rechazos mas caros de los dias mas viejos. Un mes ronda
+    // las 1.100 lineas; 5000 es el tope que acepta el backend. Si aun asi se
+    // trunca, TablaRechazos muestra el aviso.
+    Promise.all([api.resumen(filtros), api.rechazos({ ...filtros, limit: 5000 })])
       .then(([r, d]) => {
         if (cancel) return;
         setResumen(r);

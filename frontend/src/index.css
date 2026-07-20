@@ -588,14 +588,23 @@ th.num {
   color: var(--ink);
 }
 
+/* El indicador inactivo tiene que LEERSE: a 9px / .35 era invisible y las
+   columnas no parecian clickeables (se reportaba "no esta el selector en
+   Importe", cuando estaba igual que en el resto). */
 .sort-ind {
   margin-left: 4px;
-  font-size: 9px;
-  opacity: 0.35;
+  font-size: 10.5px;
+  opacity: 0.6;
+}
+
+.th-sort:hover .sort-ind {
+  opacity: 0.95;
 }
 
 .th-sort.activo .sort-ind {
   opacity: 1;
+  font-weight: 700;
+  color: var(--brand);
 }
 
 .tag {

@@ -1,0 +1,9 @@
+# Evita subir artefactos pesados y, sobre todo, los .env de dev:
+# el backend hace load_dotenv(.env) y NO debe pisar las env de Vercel en prod.
+**/__pycache__
+**/*.pyc
+backend/venv
+backend/.env
+backend/.env.example
+frontend/node_modules
+frontend/dist

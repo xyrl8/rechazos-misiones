@@ -78,9 +78,9 @@ export default function ModalMapeo({ onClose, onChange }) {
         ) : (
           <div className="modal-body">
             <p className="leyenda">
-              Los clientes de GESCOM que no matchean con Chess quedan como
-              mostrador y se excluyen del tablero. Asignándoles un promotor real
-              se reincorporan, y heredan el supervisor de ese promotor.
+              Los clientes de mostrador que no matchean con un promotor quedan
+              excluidos del tablero. Asignándoles un promotor real se
+              reincorporan, y heredan el supervisor de ese promotor.
             </p>
 
             {/* --- Formulario --- */}
@@ -128,14 +128,14 @@ export default function ModalMapeo({ onClose, onChange }) {
             {error && <div className="banner err">{error}</div>}
             {msg && <div className="banner">{msg}</div>}
 
-            {/* --- Clientes GESCOM sin resolver --- */}
+            {/* --- Clientes de mostrador sin resolver --- */}
             <h3 className="modal-sub">
-              Clientes GESCOM sin resolver
+              Clientes de mostrador sin resolver
               <span className="count">{data.sin_resolver.length}</span>
             </h3>
             {data.sin_resolver.length === 0 ? (
               <div className="empty">
-                No hay clientes de GESCOM sin resolver 🎉
+                No hay clientes de mostrador sin resolver 🎉
               </div>
             ) : (
               <div className="chips">

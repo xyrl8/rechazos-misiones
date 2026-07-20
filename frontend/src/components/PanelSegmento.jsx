@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { num, dec, moneyCompact } from "../lib/format.js";
+import { num, dec, moneyCompact, limpiarEtiqueta } from "../lib/format.js";
 
 // Panel de barras horizontales para un corte (supervisor, promotor, motivo...).
 // Cada barra es clickeable y aplica/quita el filtro correspondiente.
@@ -74,11 +74,11 @@ export default function PanelSegmento({
                 key={r.clave}
                 className={`bar-row ${sel ? "sel" : ""}`}
                 onClick={() => onSelect && onSelect(sel ? "" : r.clave)}
-                title={`${r.clave}\n${dec(r.bultos)} bultos · ${num(
+                title={`${limpiarEtiqueta(r.clave)}\n${dec(r.bultos)} bultos · ${num(
                   r.clientes
                 )} clientes · ${moneyCompact(r.importe)}`}
               >
-                <div className="bar-label">{r.clave}</div>
+                <div className="bar-label">{limpiarEtiqueta(r.clave)}</div>
                 <div className="bar-val">{fmt(v)}</div>
                 <div className="bar-track">
                   <div

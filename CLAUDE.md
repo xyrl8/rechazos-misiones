@@ -86,6 +86,15 @@ no duplica.
    Vercel.
 7. Credenciales **solo por env vars** (`.env` gitignored / env de Vercel).
    Nunca hardcodear en el código.
+8. **Comentarios estilo HILO** (`rechazo_hilos` + `rechazo_comentarios`,
+   `routers/comentarios.py`, columna "Coment." a la derecha de Importe en el
+   detalle). Un hilo se ancla a un EVENTO de rechazo tal como se agrupa en la
+   tabla: fecha + fuente + cliente. La clave `thread_key = "fecha|fuente|
+   id_cliente"` es deliberadamente independiente del `id` de `rechazos` (que el
+   sync recrea al borrar/reinsertar el día), así el hilo no se huerfaniza. Los
+   comentarios son **inmutables** (no hay borrado): a lo sumo el hilo se marca
+   `resuelto` (y se puede reabrir). El frontend calcula la misma clave en
+   `lib/format.js` (`threadKey`) — si se cambia una, cambiar la otra.
 
 ## Sync
 
@@ -115,6 +124,12 @@ no duplica.
   la conexión hasta el límite de 800s de la función. Acepta `referencias`,
   `desde`, `hasta`, `fuentes`.
 - `GET/POST/DELETE /api/mapeo` — mapeo manual cliente→supervisor.
+- `GET /api/comentarios?fecha_desde=&fecha_hasta=` — hilos de comentarios del
+  período, indexados por `thread_key`, con conteo y estado (para el badge del
+  detalle). `GET /api/comentarios/hilo?thread_key=` — un hilo completo.
+  `POST /api/comentarios` — agrega un comentario (crea el hilo si no existe).
+  `POST /api/comentarios/resolver` — marca el hilo resuelto / lo reabre. Sin
+  auth en v1 (igual que `/api/mapeo`).
 
 Filtros comunes: `fuente` (CHESS/GESCOM/TODO), `fecha_desde`, `fecha_hasta`,
 `supervisor`, `vendedor`, `dias_visita`, `ruta`, `cliente`, `articulo`,

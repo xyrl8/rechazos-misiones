@@ -1235,3 +1235,155 @@ th.num {
   border-color: var(--brand);
   background: var(--brand-soft);
 }
+
+/* --- Comentarios (hilo) --- */
+.coment-cell {
+  text-align: center;
+}
+
+.btn-coment {
+  border: 1px dashed var(--line);
+  background: #fff;
+  color: var(--muted);
+  border-radius: 7px;
+  padding: 3px 8px;
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.btn-coment:hover {
+  border-color: var(--brand);
+  color: var(--brand);
+}
+
+.btn-coment.tiene {
+  border-style: solid;
+  border-color: var(--brand);
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+
+.btn-coment.resuelto {
+  border-color: var(--ok);
+  background: #e9f7f1;
+  color: var(--ok);
+}
+
+.modal-sm {
+  max-width: 540px;
+}
+
+.hilo-ctx {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-bottom: 12px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.hilo-ctx-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.hilo-estado.ok {
+  color: var(--ok);
+  font-weight: 700;
+}
+
+.hilo-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 320px;
+  overflow-y: auto;
+  margin-bottom: 14px;
+}
+
+.hilo-item {
+  background: var(--bg);
+  border-radius: 9px;
+  padding: 9px 11px;
+  border-left: 3px solid var(--brand);
+}
+
+.hilo-item-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 3px;
+}
+
+.hilo-autor {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.hilo-fecha {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.hilo-texto {
+  font-size: 13px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.hilo-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+
+.hilo-form textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-family: inherit;
+  resize: vertical;
+}
+
+.hilo-form textarea:focus {
+  outline: none;
+  border-color: var(--brand);
+}
+
+.hilo-acciones {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.btn-secondary {
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--ink);
+  border-radius: 7px;
+  padding: 7px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-secondary:hover {
+  border-color: var(--brand);
+  color: var(--brand);
+}
+
+.btn-secondary:disabled {
+  opacity: 0.55;
+  cursor: default;
+}

@@ -8,6 +8,7 @@ import KpiCards from "../components/KpiCards.jsx";
 import PanelSegmento from "../components/PanelSegmento.jsx";
 import TablaRechazos from "../components/TablaRechazos.jsx";
 import ModalMapeo from "../components/ModalMapeo.jsx";
+import ModalComentarios from "../components/ModalComentarios.jsx";
 
 const FILTROS_INI = {
   fuente: "TODO",
@@ -30,6 +31,8 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [modalMapeo, setModalMapeo] = useState(false);
+  const [comentarioGrupo, setComentarioGrupo] = useState(null); // hilo abierto
+  const [hilos, setHilos] = useState({}); // index thread_key -> hilo
   const [version, setVersion] = useState(0); // fuerza recarga tras un mapeo
 
   // --- Mutadores de filtros ---
@@ -38,21 +41,6 @@ export default function Dashboard() {
   }, []);
   const setRango = useCallback((desde, hasta) => {
     setFiltros((f) => ({ ...f, fecha_desde: desde, fecha_hasta: hasta }));
-  }, []);
-  const setFuente = useCallback((fuente) => {
-    // Las dimensiones (supervisor, promotor, ruta...) son propias de cada
-    // fuente: al cambiar de fuente se limpian para no arrastrar un filtro
-    // que la nueva fuente no puede cumplir (dejaria todo en 0).
-    setFiltros((f) => ({
-      ...f,
-      fuente,
-      supervisor: "",
-      vendedor: "",
-      dias_visita: "",
-      cliente: "",
-      articulo: "",
-      motivo: "",
-    }));
   }, []);
   const limpiar = useCallback(() => {
     setFiltros((f) => ({
@@ -80,6 +68,21 @@ export default function Dashboard() {
       cancel = true;
     };
   }, [filtros, version]);
+
+  // --- Hilos de comentarios del período (para badge en el detalle) ---
+  const recargarHilos = useCallback(() => {
+    api
+      .comentarios({
+        fecha_desde: filtros.fecha_desde,
+        fecha_hasta: filtros.fecha_hasta,
+      })
+      .then((r) => setHilos(r.hilos || {}))
+      .catch(() => setHilos({}));
+  }, [filtros.fecha_desde, filtros.fecha_hasta]);
+
+  useEffect(() => {
+    recargarHilos();
+  }, [recargarHilos, version]);
 
   // --- Opciones de los selectores (dependen de fuente + fechas) ---
   useEffect(() => {
@@ -139,11 +142,7 @@ export default function Dashboard() {
               hasta: filtros.fecha_hasta,
             }}
           />
-          <MenuConfig
-            fuente={filtros.fuente}
-            onFuente={setFuente}
-            onMapeo={() => setModalMapeo(true)}
-          />
+          <MenuConfig onMapeo={() => setModalMapeo(true)} />
         </div>
         <div className="sync-info">{syncTxt}</div>
       </div>
@@ -181,6 +180,8 @@ export default function Dashboard() {
             periodoCriticidad={resumen.clientes_criticos_periodo}
             seleccion={filtros.cliente}
             onSelectCliente={(v) => setCampo("cliente", v)}
+            hilos={hilos}
+            onComentar={setComentarioGrupo}
           />
 
           <div className="grid">
@@ -216,6 +217,14 @@ export default function Dashboard() {
         <ModalMapeo
           onClose={() => setModalMapeo(false)}
           onChange={() => setVersion((v) => v + 1)}
+        />
+      )}
+
+      {comentarioGrupo && (
+        <ModalComentarios
+          grupo={comentarioGrupo}
+          onClose={() => setComentarioGrupo(null)}
+          onChange={recargarHilos}
         />
       )}
     </div>

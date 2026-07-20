@@ -105,6 +105,38 @@ CREATE TABLE IF NOT EXISTS cliente_supervisor_manual (
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Comentarios sobre rechazos (estilo HILO). Un "hilo" es un evento de rechazo
+-- tal como se muestra en el detalle del tablero: fecha + fuente + cliente.
+-- La clave `thread_key` (= "fecha|fuente|id_cliente") es ESTABLE entre syncs:
+-- el sync borra y reinserta los `rechazos` del día (cambia su `id` BIGSERIAL),
+-- pero fecha/fuente/cliente del evento se conservan, así que el hilo no se
+-- huerfaniza. Los comentarios son INMUTABLES (no hay borrado): a lo sumo el
+-- hilo se marca como resuelto (y se puede reabrir).
+CREATE TABLE IF NOT EXISTS rechazo_hilos (
+    thread_key   TEXT PRIMARY KEY,
+    fecha        DATE,
+    fuente       TEXT,
+    id_cliente   TEXT,
+    cliente      TEXT NOT NULL DEFAULT '',
+    resuelto     BOOLEAN NOT NULL DEFAULT false,
+    resuelto_at  TIMESTAMPTZ,
+    resuelto_por TEXT NOT NULL DEFAULT '',
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_rechazo_hilos_fecha ON rechazo_hilos (fecha);
+
+CREATE TABLE IF NOT EXISTS rechazo_comentarios (
+    id         BIGSERIAL PRIMARY KEY,
+    thread_key TEXT NOT NULL REFERENCES rechazo_hilos(thread_key) ON DELETE CASCADE,
+    comentario TEXT NOT NULL,
+    autor      TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_rechazo_coment_thread ON rechazo_comentarios (thread_key);
+
 CREATE TABLE IF NOT EXISTS sync_log (
     id         BIGSERIAL PRIMARY KEY,
     fuente     TEXT,

@@ -1,10 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
-const FUENTES = ["CHESS", "GESCOM", "TODO"];
-
-// Menu de configuracion (icono de tuerca). Agrupa la fuente de datos y el
-// acceso al mapeo de supervisores.
-export default function MenuConfig({ fuente, onFuente, onMapeo }) {
+// Menu de configuracion (icono de tuerca): acceso al mapeo de supervisores.
+export default function MenuConfig({ onMapeo }) {
   const [abierto, setAbierto] = useState(false);
   const ref = useRef(null);
 
@@ -29,19 +26,6 @@ export default function MenuConfig({ fuente, onFuente, onMapeo }) {
       </button>
       {abierto && (
         <div className="config-menu">
-          <div className="config-titulo">Fuente de datos</div>
-          {FUENTES.map((f) => (
-            <label key={f} className="config-opt">
-              <input
-                type="radio"
-                name="cfg-fuente"
-                checked={fuente === f}
-                onChange={() => onFuente(f)}
-              />
-              <span>{f}</span>
-            </label>
-          ))}
-          <div className="config-sep" />
           <button
             className="config-accion"
             onClick={() => {

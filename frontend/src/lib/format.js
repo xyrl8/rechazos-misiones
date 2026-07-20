@@ -52,10 +52,47 @@ export function diasVisitaLabel(raw) {
     .join(", ");
 }
 
+// Clave estable del hilo de comentarios de un evento de rechazo
+// (fecha + fuente + cliente). DEBE coincidir con `thread_key` del backend
+// (`routers/comentarios.py`): el sync reinserta los rechazos del día, pero
+// esta clave no depende del `id` que cambia.
+export function threadKey(fecha, fuente, idCliente) {
+  const fec = String(fecha ?? "").slice(0, 10);
+  const fte = String(fuente ?? "").toUpperCase();
+  const idc = idCliente == null ? "" : String(idCliente);
+  return `${fec}|${fte}|${idc}`;
+}
+
+// Fecha+hora corta para el hilo. "2026-05-15T13:20:00Z" -> "15/05 13:20"
+export function fechaHora(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d)) return String(iso);
+  return d.toLocaleString("es-AR", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 // Cliente en formato "código - razón social" (el código es el de Chess).
 export function clienteLabel(idCliente, nombre) {
   const id = (idCliente ?? "").toString().trim();
   return id ? `${id} - ${nombre}` : nombre;
+}
+
+// Etiqueta para mostrar: el tablero unifica todas las fuentes bajo Chess, así
+// que se quita cualquier mención de la otra fuente de los textos visibles
+// (ej. el supervisor "MOSTRADOR (GESCOM)" se muestra como "MOSTRADOR").
+// ⚠️ Solo para DISPLAY: el valor crudo se conserva para que los filtros sigan
+// matcheando contra el backend.
+export function limpiarEtiqueta(s) {
+  if (s == null) return s;
+  return String(s)
+    .replace(/\s*\(?\s*(GESCOM|GESTI[OÓ]N)\s*\)?/gi, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
 }
 
 export function hoyISO() {

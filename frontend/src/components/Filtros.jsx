@@ -6,6 +6,7 @@ import {
   rangoSemanaPasada,
   rangoMTD,
   rangoYTD,
+  limpiarEtiqueta,
 } from "../lib/format.js";
 
 // Días de visita: códigos de Chess (2=Lun … 7=Sáb; no se usa el domingo).
@@ -30,7 +31,7 @@ function Selector({ label, campo, filtros, setCampo, opciones }) {
         <option value="">Todos</option>
         {(opciones || []).map((o) => (
           <option key={o} value={o}>
-            {o}
+            {limpiarEtiqueta(o)}
           </option>
         ))}
       </select>

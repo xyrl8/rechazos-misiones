@@ -1,5 +1,13 @@
 import { useMemo, useState } from "react";
-import { num, dec, money, fechaLarga, clienteLabel } from "../lib/format.js";
+import {
+  num,
+  dec,
+  money,
+  fechaLarga,
+  clienteLabel,
+  threadKey,
+  limpiarEtiqueta,
+} from "../lib/format.js";
 import { umbrales, nivelDe, indiceCriticidad } from "../lib/criticidad.js";
 
 // Columnas ordenables del detalle. `num` = alineación a la derecha.
@@ -10,7 +18,6 @@ import { umbrales, nivelDe, indiceCriticidad } from "../lib/criticidad.js";
 // reparten el espacio restante.
 const COLS = [
   { key: "fecha", label: "Fecha", num: false, w: 78 },
-  { key: "fuente", label: "Fuente", num: false, w: 64 },
   { key: "cliente", label: "Cliente", num: false },
   { key: "vendedor", label: "Promotor", num: false },
   { key: "supervisor", label: "Supervisor", num: false },
@@ -20,6 +27,7 @@ const COLS = [
   { key: "sku", label: "SKU", num: true, w: 56 },
   { key: "bultos", label: "Bultos", num: true, w: 72 },
   { key: "importe", label: "Importe", num: true, w: 100 },
+  { key: "comentarios", label: "Coment.", num: false, w: 112 },
 ];
 
 // Valor por el que se ordena un grupo según la columna.
@@ -27,8 +35,6 @@ function valorOrden(g, key) {
   switch (key) {
     case "fecha":
       return g.fecha || "";
-    case "fuente":
-      return g.fuente || "";
     case "cliente":
       return clienteLabel(g.id_cliente, g.cliente).toLowerCase();
     case "vendedor":
@@ -50,6 +56,11 @@ function valorOrden(g, key) {
       return g.bultos;
     case "importe":
       return g.importe;
+    case "comentarios":
+      // Pendientes (con comentarios sin resolver) primero, luego resueltos,
+      // luego sin comentarios. Desempata por cantidad de comentarios.
+      if (!g.hilo || !g.hilo.n_comentarios) return 0;
+      return (g.hilo.resuelto ? 1000 : 2000) + Number(g.hilo.n_comentarios);
     default:
       return 0;
   }
@@ -68,6 +79,8 @@ export default function TablaRechazos({
   periodoCriticidad,
   seleccion,
   onSelectCliente,
+  hilos,
+  onComentar,
 }) {
   const rows = data?.rows || [];
   const total = data?.total || 0;
@@ -87,6 +100,7 @@ export default function TablaRechazos({
       if (!map.has(key)) {
         map.set(key, {
           key,
+          thread_key: threadKey(r.fecha, r.fuente, r.id_cliente),
           fecha: r.fecha,
           fuente: r.fuente,
           id_cliente: r.id_cliente,
@@ -107,13 +121,15 @@ export default function TablaRechazos({
       g.motivos.add(r.motivo);
     }
     // Criticidad del cliente: días distintos con rechazo en la ventana cc.
+    // Y el hilo de comentarios del evento (si existe).
     for (const g of map.values()) {
       const cc = idx.get(String(g.id_cliente ?? ""));
       g.veces = cc ? cc.veces : null;
       g.nivel = nivelDe(g.veces, u);
+      g.hilo = (hilos && hilos[g.thread_key]) || null;
     }
     return [...map.values()];
-  }, [rows, idx, u]);
+  }, [rows, idx, u, hilos]);
 
   const gruposOrdenados = useMemo(() => {
     const { campo, dir } = orden;
@@ -224,6 +240,7 @@ export default function TablaRechazos({
                         onSelectCliente &&
                         onSelectCliente(seleccion === label ? "" : label)
                       }
+                      onComentar={() => onComentar && onComentar(g)}
                     />
                   );
                 }
@@ -246,7 +263,17 @@ export default function TablaRechazos({
   );
 }
 
-function GrupoFilas({ g, abierto, motivo, seleccionado, onToggle, onCliente }) {
+function GrupoFilas({
+  g,
+  abierto,
+  motivo,
+  seleccionado,
+  onToggle,
+  onCliente,
+  onComentar,
+}) {
+  const hilo = g.hilo;
+  const n = hilo ? Number(hilo.n_comentarios) || 0 : 0;
   return (
     <>
       <tr
@@ -256,9 +283,6 @@ function GrupoFilas({ g, abierto, motivo, seleccionado, onToggle, onCliente }) {
       >
         <td className="caret">{abierto ? "▾" : "▸"}</td>
         <td>{fechaLarga(g.fecha)}</td>
-        <td>
-          <span className={`tag ${g.fuente}`}>{g.fuente}</span>
-        </td>
         <td>
           <button
             type="button"
@@ -281,8 +305,8 @@ function GrupoFilas({ g, abierto, motivo, seleccionado, onToggle, onCliente }) {
             </div>
           ) : null}
         </td>
-        <td>{g.vendedor}</td>
-        <td>{g.supervisor}</td>
+        <td>{limpiarEtiqueta(g.vendedor)}</td>
+        <td>{limpiarEtiqueta(g.supervisor)}</td>
         <td>
           <span className={`nivel-tag ${g.nivel.cls}`}>{g.nivel.txt}</span>
         </td>
@@ -295,12 +319,39 @@ function GrupoFilas({ g, abierto, motivo, seleccionado, onToggle, onCliente }) {
         <td className="num">
           <b>{money(g.importe)}</b>
         </td>
+        <td className="coment-cell">
+          <button
+            type="button"
+            className={`btn-coment${n ? " tiene" : ""}${
+              hilo?.resuelto ? " resuelto" : ""
+            }`}
+            onClick={(e) => {
+              e.stopPropagation();
+              onComentar();
+            }}
+            title={
+              n
+                ? hilo?.resuelto
+                  ? `Hilo resuelto · ${n} comentario(s)`
+                  : `${n} comentario(s) — clic para ver el hilo`
+                : "Agregar un comentario"
+            }
+          >
+            {n ? (
+              <>
+                {hilo?.resuelto ? "✓" : "💬"} {num(n)}
+              </>
+            ) : (
+              "+ Comentar"
+            )}
+          </button>
+        </td>
       </tr>
       {abierto &&
         g.lineas.map((r, i) => (
           <tr key={i} className="det-row">
             <td></td>
-            <td colSpan={7} className="det-sku">
+            <td colSpan={6} className="det-sku">
               {r.articulo}
               {r.transporte ? (
                 <span className="det-extra"> · transporte {r.transporte}</span>
@@ -312,6 +363,7 @@ function GrupoFilas({ g, abierto, motivo, seleccionado, onToggle, onCliente }) {
             <td className="num">—</td>
             <td className="num">{dec(r.bultos_rechazados)}</td>
             <td className="num">{money(r.importe_rechazado)}</td>
+            <td></td>
           </tr>
         ))}
     </>

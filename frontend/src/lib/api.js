@@ -49,4 +49,13 @@ export const api = {
     req("POST", "/api/mapeo", { body: { cliente, vendedor } }),
   borrarMapeo: (nombreNorm) =>
     req("DELETE", "/api/mapeo", { params: { nombre_norm: nombreNorm } }),
+  // Comentarios sobre rechazos (estilo hilo).
+  comentarios: (params) => get("/api/comentarios", params),
+  hilo: (threadKey) => get("/api/comentarios/hilo", { thread_key: threadKey }),
+  agregarComentario: (body) =>
+    req("POST", "/api/comentarios", { body }),
+  resolverHilo: (threadKey, resuelto, autor) =>
+    req("POST", "/api/comentarios/resolver", {
+      body: { thread_key: threadKey, resuelto, autor },
+    }),
 };

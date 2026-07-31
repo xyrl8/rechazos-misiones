@@ -114,16 +114,19 @@ export default function ResumenMensual() {
     });
   }, [data, unidad, colorMotivo]);
 
-  // Serie del gráfico de %: una sola barra por mes (sin apilar).
+  // Serie del gráfico de %: una sola barra por mes (sin apilar). Los meses con
+  // la venta cargada a medias van atenuados: su % está sobreestimado.
   const seriePct = useMemo(
     () => (data?.meses || [])
       .filter((m) => m[`pct_${unidad}`] !== null && m[`pct_${unidad}`] !== undefined)
-      .map((m) => ({ mes: m.mes, total: m[`pct_${unidad}`], partes: [] })),
+      .map((m) => ({ mes: m.mes, total: m[`pct_${unidad}`], partes: [],
+                     color: m.parcial ? "#a8c2ea" : "#2a78d6" })),
     [data, unidad]
   );
 
   const k = data?.kpis;
   const sinVenta = !!data && !Number(k?.venta_bultos) && !Number(k?.venta_importe);
+  const parciales = (data?.meses || []).filter((m) => m.parcial);
 
   return (
     <>
@@ -234,6 +237,14 @@ export default function ResumenMensual() {
         </div>
       )}
 
+      {!!parciales.length && !loading && (
+        <div className="banner warn">
+          Venta cargada a medias en {parciales.map((m) => etiquetaMes(m.mes, true)).join(", ")}:
+          ahí el <b>%</b> queda sobreestimado (el rechazo del mes completo se compara
+          contra una parte de la venta). Esos meses van atenuados en el gráfico.
+        </div>
+      )}
+
       {loading && !data ? (
         <div className="loading"><div className="spinner" />Cargando resumen…</div>
       ) : data ? (
@@ -338,18 +349,26 @@ export default function ResumenMensual() {
                   </tr>
                 </thead>
                 <tbody>
-                  {data.meses.map((m) => (
-                    <tr key={m.mes}>
-                      <td className="mes">{etiquetaMes(m.mes, true)}</td>
-                      <td className="n">{dec(m.bultos)}</td>
-                      <td className="n destac">{pctTxt(m.pct_bultos)}</td>
-                      <td className="n">{dec(m.hl)}</td>
-                      <td className="n destac">{pctTxt(m.pct_hl)}</td>
-                      <td className="n">{money(m.importe)}</td>
-                      <td className="n destac">{pctTxt(m.pct_importe)}</td>
-                      <td className="n">{num(m.clientes)}</td>
-                    </tr>
-                  ))}
+                  {data.meses.map((m) => {
+                    // Mes con la venta a medias: el % se muestra atenuado y
+                    // dice cuántos días de venta tiene cargados.
+                    const cls = m.parcial ? "n destac parcial" : "n destac";
+                    const tit = m.parcial
+                      ? `Sobreestimado: solo ${m.dias_venta} día(s) de venta cargados`
+                      : undefined;
+                    return (
+                      <tr key={m.mes}>
+                        <td className="mes">{etiquetaMes(m.mes, true)}</td>
+                        <td className="n">{dec(m.bultos)}</td>
+                        <td className={cls} title={tit}>{pctTxt(m.pct_bultos)}</td>
+                        <td className="n">{dec(m.hl)}</td>
+                        <td className={cls} title={tit}>{pctTxt(m.pct_hl)}</td>
+                        <td className="n">{money(m.importe)}</td>
+                        <td className={cls} title={tit}>{pctTxt(m.pct_importe)}</td>
+                        <td className="n">{num(m.clientes)}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
                 <tfoot>
                   <tr>

@@ -1691,3 +1691,12 @@ th.num {
 .tabla-mensual td .leg-punto {
   margin-right: 7px;
 }
+
+/* % calculado contra una venta cargada a medias: se muestra, pero atenuado. */
+.tabla-mensual td.parcial {
+  color: var(--muted);
+  font-weight: 600;
+}
+.tabla-mensual td.parcial::after {
+  content: " *";
+}

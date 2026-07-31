@@ -84,7 +84,7 @@ export default function BarrasMensual({
           const activo = hover && hover.mes === d.mes;
           const partes = d.partes && d.partes.length
             ? d.partes.filter((p) => (p.valor || 0) > 0)
-            : [{ clave: null, valor: d.total, color }];
+            : [{ clave: null, valor: d.total, color: d.color || color }];
           // Se apila de abajo hacia arriba; 2px de aire entre segmentos.
           let acum = 0;
           const marcas = partes.map((p, j) => {

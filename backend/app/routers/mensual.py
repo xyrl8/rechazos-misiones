@@ -102,6 +102,7 @@ def mensual(
         cur.execute(f"""
             SELECT to_char(fecha, 'YYYY-MM') AS mes,
                    COUNT(*)                                  AS lineas,
+                   COUNT(DISTINCT fecha)                     AS dias_rechazo,
                    COUNT(DISTINCT id_cliente)                AS clientes,
                    COALESCE(SUM(bultos_rechazados), 0)       AS bultos,
                    COALESCE(SUM(hl_rechazados), 0)           AS hl,
@@ -112,6 +113,7 @@ def mensual(
 
         cur.execute(f"""
             SELECT to_char(fecha, 'YYYY-MM') AS mes,
+                   COUNT(DISTINCT fecha)     AS dias_venta,
                    COALESCE(SUM(bultos), 0)  AS venta_bultos,
                    COALESCE(SUM(hl), 0)      AS venta_hl,
                    COALESCE(SUM(importe), 0) AS venta_importe
@@ -123,9 +125,16 @@ def mensual(
         for m in sorted(set(rech_mes) | set(venta_mes)):
             r = rech_mes.get(m, {})
             v = venta_mes.get(m, {})
+            # Cobertura: si el mes tiene menos días de venta cargados que días
+            # con rechazo, el % está sobreestimado (numerador completo contra
+            # denominador parcial). El frontend lo marca en vez de mentir.
+            dias_venta = v.get("dias_venta", 0)
             meses.append(_con_pct({
                 "mes": m,
                 "lineas": r.get("lineas", 0),
+                "dias_venta": dias_venta,
+                "dias_rechazo": r.get("dias_rechazo", 0),
+                "parcial": bool(dias_venta) and dias_venta < r.get("dias_rechazo", 0),
                 "clientes": r.get("clientes", 0),
                 "bultos": r.get("bultos", 0),
                 "hl": r.get("hl", 0),

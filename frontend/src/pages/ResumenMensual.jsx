@@ -130,21 +130,12 @@ export default function ResumenMensual() {
 
   return (
     <>
-      {/* ---------- Filtros propios de la solapa ---------- */}
+      {/* ---------- Filtros propios de la solapa ----------
+           Sin selector de fuente: el tablero unifica preventa y mostrador bajo
+           una sola lectura (la solapa 1 tampoco lo muestra, y `limpiarEtiqueta`
+           saca la palabra GESCOM de los textos visibles). `filtros.fuente`
+           queda fijo en "TODO". */}
       <div className="filtros">
-        <div className="field">
-          <label>Fuente</label>
-          <div className="toggle">
-            {["TODO", "CHESS", "GESCOM"].map((f) => (
-              <button key={f} data-f={f}
-                      className={filtros.fuente === f ? "active" : ""}
-                      onClick={() => setCampo("fuente", f)}>
-                {f === "GESCOM" ? "MOSTRADOR" : f}
-              </button>
-            ))}
-          </div>
-        </div>
-
         <div className="field">
           <label>Desde</label>
           <input type="date" value={filtros.fecha_desde}

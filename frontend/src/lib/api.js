@@ -36,6 +36,8 @@ const get = (path, params) => req("GET", path, { params });
 
 export const api = {
   resumen: (filtros) => get("/api/resumen", filtros),
+  // Solapa 2: serie mensual + % sobre la venta (denominador ventas_dia).
+  mensual: (filtros) => get("/api/mensual", filtros),
   rechazos: (filtros) => get("/api/rechazos", filtros),
   filtros: (params) => get("/api/filtros", params),
   syncEstado: () => get("/api/sync/estado"),

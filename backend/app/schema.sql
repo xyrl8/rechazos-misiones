@@ -137,6 +137,34 @@ CREATE TABLE IF NOT EXISTS rechazo_comentarios (
 
 CREATE INDEX IF NOT EXISTS idx_rechazo_coment_thread ON rechazo_comentarios (thread_key);
 
+-- Hectolitros rechazados. Chess publica el HL de cada linea en `unimedtotal`
+-- (validado: ratio unimedtotal/cantidadesTotal constante por SKU, ej. 4x6x473cc
+-- = 0,1135 HL/bulto). Se prorratea igual que el importe. GESCOM no trae HL: se
+-- deriva multiplicando los bultos por `ref_articulos.hl_bulto` (maestro Chess).
+ALTER TABLE rechazos      ADD COLUMN IF NOT EXISTS hl_rechazados NUMERIC NOT NULL DEFAULT 0;
+ALTER TABLE ref_articulos ADD COLUMN IF NOT EXISTS hl_bulto      NUMERIC;
+
+-- Denominador del % de rechazo: la VENTA del dia (bruta, antes de la nota de
+-- credito). Sale de las mismas lineas que ya baja el sync (las de cantidad
+-- positiva); las negativas son NC / devoluciones, o sea el propio rechazo.
+-- Granularidad (fuente, fecha, vendedor) para poder abrir el % por promotor y
+-- por supervisor sin mezclar numerador filtrado con denominador total.
+CREATE TABLE IF NOT EXISTS ventas_dia (
+    fuente      TEXT NOT NULL,
+    fecha       DATE NOT NULL,
+    id_vendedor TEXT NOT NULL DEFAULT '',
+    vendedor    TEXT NOT NULL DEFAULT 'SIN PROMOTOR',
+    supervisor  TEXT NOT NULL DEFAULT 'SIN SUPERVISOR',
+    lineas      INTEGER NOT NULL DEFAULT 0,
+    bultos      NUMERIC NOT NULL DEFAULT 0,
+    hl          NUMERIC NOT NULL DEFAULT 0,
+    importe     NUMERIC NOT NULL DEFAULT 0,
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (fuente, fecha, id_vendedor)
+);
+
+CREATE INDEX IF NOT EXISTS idx_ventas_dia_fecha ON ventas_dia (fecha);
+
 CREATE TABLE IF NOT EXISTS sync_log (
     id         BIGSERIAL PRIMARY KEY,
     fuente     TEXT,

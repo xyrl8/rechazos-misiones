@@ -28,8 +28,11 @@ RECHAZO_COLS = [
     "id_cliente", "cliente",
     "localidad", "domicilio", "id_articulo", "articulo", "canal", "origen",
     "transporte", "excluido", "motivo_exclusion",
-    "bultos_rechazados", "importe_rechazado", "raw", "linea_key",
+    "bultos_rechazados", "hl_rechazados", "importe_rechazado", "raw", "linea_key",
 ]
+
+VENTA_COLS = ["fuente", "fecha", "id_vendedor", "vendedor", "supervisor",
+              "lineas", "bultos", "hl", "importe"]
 
 # --- Reglas de exclusion (no son rechazos comerciales a repasar) ---
 # Motivos que se descartan (devoluciones por tramites internos, no del cliente).
@@ -235,7 +238,14 @@ def _load_ref(conn):
     cur.execute("SELECT nombre_norm, supervisor, vendedor FROM cliente_supervisor_manual")
     manual_map = {n: {"supervisor": s, "vendedor": v}
                   for (n, s, v) in cur.fetchall()}
-    return clientes, articulos, vend_sup, chess_por_nombre, chess_por_codigo, manual_map
+    # Maestro HL/bulto (lo alimenta el sync de Chess). Lo consume GESCOM, que
+    # se sincroniza en una pasada posterior: por eso viaja por la DB y no en
+    # memoria.
+    cur.execute("SELECT id_articulo, hl_bulto FROM ref_articulos "
+                "WHERE fuente = 'CHESS' AND hl_bulto IS NOT NULL")
+    hl_map = {a: float(h) for (a, h) in cur.fetchall()}
+    return (clientes, articulos, vend_sup, chess_por_nombre, chess_por_codigo,
+            manual_map, hl_map)
 
 
 # --------------------------------------------------------------------------
@@ -253,6 +263,10 @@ def _chess_rows(comprobantes: List[dict], clientes: dict, vend_sup: dict) -> Lis
         ctot = _num(c.get("cantidadesTotal"))
         sneto = abs(_num(c.get("subtotalNeto")))
         importe = sneto * abs(crech) / abs(ctot) if ctot else sneto
+        # HL: `unimedtotal` es el hectolitraje de la línea (unidad de medida de
+        # Chess). Se prorratea igual que el importe. Los combos vienen en 0.
+        umtot = abs(_num(c.get("unimedtotal")))
+        hl = umtot * abs(crech) / abs(ctot) if ctot else umtot
         idcli = _txt(c.get("idCliente"))
         ref = clientes.get(("CHESS", idcli), {})
         idvend = _txt(c.get("idVendedor"))
@@ -284,6 +298,7 @@ def _chess_rows(comprobantes: List[dict], clientes: dict, vend_sup: dict) -> Lis
             "excluido": bool(razon),
             "motivo_exclusion": razon,
             "bultos_rechazados": abs(crech),
+            "hl_rechazados": round(hl, 5),
             "importe_rechazado": round(importe, 2),
             "raw": json.dumps(c, default=str, ensure_ascii=False),
             "linea_key": f"{_txt(c.get('idDocumento'))}-{_txt(c.get('letra'))}-{_txt(c.get('serie'))}"
@@ -292,9 +307,92 @@ def _chess_rows(comprobantes: List[dict], clientes: dict, vend_sup: dict) -> Lis
     return out
 
 
+# --------------------------------------------------------------------------
+# Venta del dia (denominador del % de rechazo)
+# --------------------------------------------------------------------------
+def _chess_ventas(comps: List[dict], fecha: str) -> List[dict]:
+    """Agrega la VENTA del dia de Chess por promotor, para `ventas_dia`.
+
+    Denominador = venta BRUTA facturada: las lineas de cantidad POSITIVA. Las
+    negativas son notas de credito y devoluciones, es decir el rechazo mismo
+    (que la factura original ya contabilizo). Criterio por signo y no por
+    `dsDocumento` para que un tipo de comprobante nuevo no quede afuera en
+    silencio.
+    """
+    acc: Dict[tuple, dict] = {}
+    for c in comps:
+        ctot = _num(c.get("cantidadesTotal"))
+        if ctot <= 0:
+            continue
+        idvend = _txt(c.get("idVendedor"))
+        k = ("CHESS", idvend)
+        a = acc.setdefault(k, {
+            "fuente": "CHESS", "fecha": fecha, "id_vendedor": idvend,
+            "vendedor": _txt(c.get("dsVendedor")) or "SIN PROMOTOR",
+            "supervisor": _txt(c.get("dsSupervisor")) or "SIN SUPERVISOR",
+            "lineas": 0, "bultos": 0.0, "hl": 0.0, "importe": 0.0,
+        })
+        a["lineas"] += 1
+        a["bultos"] += ctot
+        a["hl"] += _num(c.get("unimedtotal"))
+        a["importe"] += _num(c.get("subtotalNeto"))
+    for a in acc.values():
+        a["bultos"] = round(a["bultos"], 4)
+        a["hl"] = round(a["hl"], 5)
+        a["importe"] = round(a["importe"], 2)
+    return list(acc.values())
+
+
+def _hl_por_bulto(comps: List[dict]) -> Dict[str, float]:
+    """Maestro HL/bulto por articulo, derivado de las lineas de venta de Chess.
+
+    `unimedtotal / cantidadesTotal` es constante por SKU (verificado sobre un
+    dia completo: 154 articulos, cero inconsistencias). Sirve para valorizar en
+    HL los rechazos de GESCOM, que no traen la unidad de medida.
+    """
+    out: Dict[str, float] = {}
+    for c in comps:
+        ctot = _num(c.get("cantidadesTotal"))
+        um = _num(c.get("unimedtotal"))
+        idart = _txt(c.get("idArticulo"))
+        if not idart or not ctot or not um:
+            continue
+        out[idart] = round(abs(um) / abs(ctot), 6)
+    return out
+
+
+def _gescom_ventas(ventas: List[dict], fecha: str, hl_map: Dict[str, float]) -> List[dict]:
+    """Agrega la venta del dia de GESCOM (mostrador) por operador."""
+    acc: Dict[tuple, dict] = {}
+    for v in ventas:
+        f = (_txt(v.get("fechaPedido")) or _txt(v.get("fechaEntrega")))[:10]
+        if f != fecha:
+            continue
+        idvend = _txt(v.get("codigoVendedor"))
+        k = ("GESCOM", idvend)
+        a = acc.setdefault(k, {
+            "fuente": "GESCOM", "fecha": fecha, "id_vendedor": idvend,
+            "vendedor": f"MOSTRADOR {idvend}" if idvend else "MOSTRADOR (GESCOM)",
+            "supervisor": "MOSTRADOR (GESCOM)",
+            "lineas": 0, "bultos": 0.0, "hl": 0.0, "importe": 0.0,
+        })
+        for it in (v.get("items") or []):
+            cant = _num(it.get("cantidad"))
+            a["lineas"] += 1
+            a["bultos"] += cant
+            a["hl"] += cant * hl_map.get(_txt(it.get("codigoItem")), 0.0)
+            a["importe"] += abs(_num(it.get("importeNeto")))
+    for a in acc.values():
+        a["bultos"] = round(a["bultos"], 4)
+        a["hl"] = round(a["hl"], 5)
+        a["importe"] = round(a["importe"], 2)
+    return list(acc.values())
+
+
 def _gescom_rows(ventas: List[dict], clientes: dict, articulos: dict,
                  vend_sup: dict, chess_por_nombre: dict, chess_por_codigo: dict,
-                 manual_map: dict) -> List[dict]:
+                 manual_map: dict, hl_map: Dict[str, float] = None) -> List[dict]:
+    hl_map = hl_map or {}
     out = []
     for v in ventas:
         motivo = _txt(v.get("motivo"))
@@ -331,6 +429,10 @@ def _gescom_rows(ventas: List[dict], clientes: dict, articulos: dict,
         fecha = (_txt(v.get("fechaPedido")) or _txt(v.get("fechaEntrega")))[:10] or None
         for it in (v.get("items") or []):
             idart = _txt(it.get("codigoItem"))
+            # GESCOM no publica hectolitraje: se deriva del maestro HL/bulto de
+            # Chess (los codigos de articulo son los mismos). SKU sin maestro
+            # (combos, articulos que Chess no vendio) quedan en 0.
+            cant_g = _num(it.get("cantidad"))
             out.append({
                 "fuente": "GESCOM",
                 "fecha": fecha,
@@ -357,7 +459,8 @@ def _gescom_rows(ventas: List[dict], clientes: dict, articulos: dict,
                 "transporte": "",
                 "excluido": bool(razon),
                 "motivo_exclusion": razon,
-                "bultos_rechazados": _num(it.get("cantidad")),
+                "bultos_rechazados": cant_g,
+                "hl_rechazados": round(abs(cant_g) * hl_map.get(idart, 0.0), 5),
                 "importe_rechazado": round(abs(_num(it.get("importeNeto"))), 2),
                 "raw": json.dumps({**v, "items": None, "_item": it}, default=str, ensure_ascii=False),
                 "linea_key": f"{_txt(v.get('id'))}-I{idart}-{_txt(it.get('orden'))}",
@@ -388,6 +491,39 @@ def _write(conn, fuente: str, fecha: str, rows: List[dict]):
         )
         return len(dedup)
     return 0
+
+
+def _write_ventas(conn, fuente: str, fecha: str, filas: List[dict]):
+    """Reescribe la venta del dia (denominador). Idempotente por (fuente, dia)."""
+    cur = conn.cursor()
+    cur.execute("DELETE FROM ventas_dia WHERE fuente = %s AND fecha = %s", (fuente, fecha))
+    if filas:
+        psycopg2.extras.execute_values(
+            cur,
+            f"INSERT INTO ventas_dia ({','.join(VENTA_COLS)}) VALUES %s",
+            [[f[c] for c in VENTA_COLS] for f in filas],
+        )
+    return len(filas)
+
+
+def _upsert_hl_articulos(conn, comps: List[dict]):
+    """Guarda el maestro HL/bulto + descripcion de los articulos de Chess."""
+    hl = _hl_por_bulto(comps)
+    if not hl:
+        return 0
+    desc = {_txt(c.get("idArticulo")): _txt(c.get("dsArticulo")) for c in comps}
+    valores = [("CHESS", a, desc.get(a, ""), v) for a, v in hl.items()]
+    psycopg2.extras.execute_values(
+        conn.cursor(),
+        """INSERT INTO ref_articulos (fuente, id_articulo, descripcion, hl_bulto)
+           VALUES %s
+           ON CONFLICT (fuente, id_articulo) DO UPDATE
+             SET descripcion = EXCLUDED.descripcion,
+                 hl_bulto = EXCLUDED.hl_bulto,
+                 updated_at = now()""",
+        valores,
+    )
+    return len(valores)
 
 
 def _upsert_supervisores(conn, comps: List[dict]):
@@ -440,7 +576,7 @@ def sync_dia(fecha: str, fuentes: List[str] = None) -> Dict[str, int]:
     conn = get_conn()
     try:
         (clientes, articulos, vend_sup, chess_por_nombre,
-         chess_por_codigo, manual_map) = _load_ref(conn)
+         chess_por_codigo, manual_map, hl_map) = _load_ref(conn)
 
         if "CHESS" in fuentes:
             sid = conn.cursor()
@@ -450,8 +586,12 @@ def sync_dia(fecha: str, fuentes: List[str] = None) -> Dict[str, int]:
             try:
                 comps = ChessClient().get_ventas_detalladas(fecha)
                 _upsert_supervisores(conn, comps)
+                _upsert_hl_articulos(conn, comps)
                 rows = _chess_rows(comps, clientes, vend_sup)
                 n = _write(conn, "CHESS", fecha, rows)
+                # Denominador del %: la venta del dia sale de los MISMOS
+                # comprobantes, sin requests extra.
+                _write_ventas(conn, "CHESS", fecha, _chess_ventas(comps, fecha))
                 conn.cursor().execute(
                     "UPDATE sync_log SET filas=%s,estado='ok',ended_at=now() WHERE id=%s", (n, log_id))
                 conn.commit()
@@ -472,8 +612,11 @@ def sync_dia(fecha: str, fuentes: List[str] = None) -> Dict[str, int]:
             try:
                 ventas = GescomClient().get_ventas(d, d)
                 rows = _gescom_rows(ventas, clientes, articulos, vend_sup,
-                                    chess_por_nombre, chess_por_codigo, manual_map)
+                                    chess_por_nombre, chess_por_codigo,
+                                    manual_map, hl_map)
                 n = _write(conn, "GESCOM", fecha, rows)
+                _write_ventas(conn, "GESCOM", fecha,
+                              _gescom_ventas(ventas, fecha, hl_map))
                 conn.cursor().execute(
                     "UPDATE sync_log SET filas=%s,estado='ok',ended_at=now() WHERE id=%s", (n, log_id))
                 conn.commit()
@@ -487,6 +630,45 @@ def sync_dia(fecha: str, fuentes: List[str] = None) -> Dict[str, int]:
                 raise
 
         return resultado
+    finally:
+        conn.close()
+
+
+def sync_ventas_rango(desde: str, hasta: str, fuentes: List[str] = None) -> Dict[str, int]:
+    """Backfill del DENOMINADOR: solo `ventas_dia`, sin tocar `rechazos`.
+
+    Para completar el histórico del % sin reescribir los rechazos ya cargados
+    (el sync normal borra y reinserta el día: si Chess corrigió un comprobante
+    viejo, los números publicados se moverían). El HL histórico de los rechazos
+    se resuelve aparte, con `/api/sync/backfill-hl`, que lee el `raw` guardado.
+    """
+    fuentes = fuentes or ["CHESS", "GESCOM"]
+    d0 = datetime.strptime(desde, "%Y-%m-%d").date()
+    d1 = datetime.strptime(hasta, "%Y-%m-%d").date()
+    total = {"dias": 0, "CHESS": 0, "GESCOM": 0}
+    conn = get_conn()
+    try:
+        d = d0
+        while d <= d1:
+            fecha = d.isoformat()
+            if "CHESS" in fuentes:
+                comps = ChessClient().get_ventas_detalladas(fecha)
+                _upsert_hl_articulos(conn, comps)
+                total["CHESS"] += _write_ventas(conn, "CHESS", fecha,
+                                                _chess_ventas(comps, fecha))
+            if "GESCOM" in fuentes:
+                cur = conn.cursor()
+                cur.execute("SELECT id_articulo, hl_bulto FROM ref_articulos "
+                            "WHERE fuente = 'CHESS' AND hl_bulto IS NOT NULL")
+                hl_map = {a: float(h) for (a, h) in cur.fetchall()}
+                ventas = GescomClient().get_ventas(d, d)
+                total["GESCOM"] += _write_ventas(conn, "GESCOM", fecha,
+                                                 _gescom_ventas(ventas, fecha, hl_map))
+            conn.commit()
+            total["dias"] += 1
+            log.info("Ventas %s ok (%s)", fecha, total)
+            d += timedelta(days=1)
+        return total
     finally:
         conn.close()
 

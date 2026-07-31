@@ -28,6 +28,30 @@ Tabla única `rechazos` (esquema unificado Chess + GESCOM). Tablas de referencia
 El sync es **idempotente por (fuente, día)**: borra y reinserta el día. Reejecutar
 no duplica.
 
+### Hectolitros y el denominador del %
+
+- `rechazos.hl_rechazados`: Chess publica el hectolitraje de cada línea en
+  **`unimedtotal`** (no hay que derivarlo del nombre del SKU). Se prorratea por
+  `cantidadesRechazo / cantidadesTotal`, igual que el importe. El ratio
+  `unimedtotal / cantidadesTotal` es **constante por SKU** (verificado sobre un
+  día completo: 154 artículos, cero inconsistencias; 4×6×473 cc = 0,1135 HL/bulto).
+  ⚠️ Los **combos** vienen con `unimedtotal = 0` → suman 0 HL (subconteo menor,
+  mismo patrón que `reference_wqi_skus_sin_maestro_hl` en el almacén).
+- `ref_articulos.hl_bulto`: maestro HL/bulto que arma el sync de Chess. GESCOM no
+  publica unidad de medida, así que su HL se calcula `bultos × hl_bulto`
+  matcheando por código de artículo (los códigos son los mismos: 121 de 154
+  matchean en un día típico).
+- `ventas_dia (fuente, fecha, id_vendedor)`: la **venta bruta facturada** del día,
+  denominador del % de rechazo. Sale de las **mismas líneas** que ya baja el sync
+  (las de `cantidadesTotal > 0`; las negativas son las NC/devoluciones, o sea el
+  rechazo mismo), sin requests extra. Se guarda abierta por promotor + supervisor
+  para poder mostrar el % por promotor sin cruzar numerador filtrado con
+  denominador total.
+  ⚠️ El numerador **excluye** los rechazos marcados `excluido` y el denominador es
+  la venta completa: el % es la lectura conservadora, nunca queda inflado.
+  ⚠️ El rechazo se emite como NC **1-2 días después** de la factura, así que en el
+  corte de mes hay algo de desfase (se diluye en el mensual).
+
 ## APIs origen — cómo se obtienen los rechazos
 
 ### Chess ERP (Misiones, AR1121)
@@ -111,6 +135,15 @@ no duplica.
 
 - `GET /api/health`
 - `GET /api/resumen` — KPIs + cortes por cada dimensión + clientes críticos + tendencia.
+- `GET /api/mensual` — **solapa 2**: serie mensual (bultos / HL / valorizado +
+  el % de cada uno sobre la venta), desglose por motivo y motivo×mes. Filtros:
+  `fuente`, `fecha_desde`, `fecha_hasta`, `supervisor`, `vendedor`, `motivo`.
+  El filtro de `motivo` aplica **solo al numerador** (la venta no tiene motivo).
+  `pct_* = null` significa "sin denominador cargado", no 0.
+- `POST /api/sync/backfill-hl` — rellena `hl_rechazados` del histórico leyendo el
+  `raw` ya guardado (no vuelve a consultar Chess) y arma `ref_articulos.hl_bulto`.
+  Protegido por `SYNC_SECRET`. Idempotente. **No** completa `ventas_dia`: para el
+  denominador histórico hay que correr el sync del período.
 - `GET /api/rechazos` — detalle paginado.
 - `GET /api/filtros` — valores distintos para los selectores.
 - `GET /api/sync/estado` — última corrida, cobertura de datos y conteo de

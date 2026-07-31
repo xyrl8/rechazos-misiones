@@ -9,6 +9,14 @@ import PanelSegmento from "../components/PanelSegmento.jsx";
 import TablaRechazos from "../components/TablaRechazos.jsx";
 import ModalMapeo from "../components/ModalMapeo.jsx";
 import ModalComentarios from "../components/ModalComentarios.jsx";
+import ResumenMensual from "./ResumenMensual.jsx";
+
+// Solapas del tablero. "seguimiento" es el detalle operativo de la matinal;
+// "resumen" es la evolución mensual (bultos / HL / valorizado y % sobre venta).
+const SOLAPAS = [
+  { id: "seguimiento", label: "Seguimiento de rechazos" },
+  { id: "resumen", label: "Resumen mensual" },
+];
 
 const FILTROS_INI = {
   fuente: "TODO",
@@ -23,6 +31,7 @@ const FILTROS_INI = {
 };
 
 export default function Dashboard() {
+  const [solapa, setSolapa] = useState("seguimiento");
   const [filtros, setFiltros] = useState(FILTROS_INI);
   const [resumen, setResumen] = useState(null);
   const [detalle, setDetalle] = useState(null);
@@ -52,7 +61,10 @@ export default function Dashboard() {
   }, []);
 
   // --- Carga de datos principal (resumen + detalle) ---
+  // Solo corre en la solapa de seguimiento: el detalle son miles de líneas y no
+  // hace falta traerlas para mirar el resumen mensual.
   useEffect(() => {
+    if (solapa !== "seguimiento") return;
     let cancel = false;
     setLoading(true);
     setError("");
@@ -73,7 +85,7 @@ export default function Dashboard() {
     return () => {
       cancel = true;
     };
-  }, [filtros, version]);
+  }, [filtros, version, solapa]);
 
   // --- Hilos de comentarios del período (para badge en el detalle) ---
   const recargarHilos = useCallback(() => {
@@ -153,6 +165,24 @@ export default function Dashboard() {
         <div className="sync-info">{syncTxt}</div>
       </div>
 
+      <div className="solapas" role="tablist">
+        {SOLAPAS.map((s) => (
+          <button
+            key={s.id}
+            role="tab"
+            aria-selected={solapa === s.id}
+            className={solapa === s.id ? "solapa on" : "solapa"}
+            onClick={() => setSolapa(s.id)}
+          >
+            {s.label}
+          </button>
+        ))}
+      </div>
+
+      {solapa === "resumen" ? (
+        <ResumenMensual />
+      ) : (
+      <>
       <Filtros
         filtros={filtros}
         setCampo={setCampo}
@@ -214,6 +244,8 @@ export default function Dashboard() {
           </div>
         </>
       ) : null}
+      </>
+      )}
 
       <div className="foot">
         Mercosur Distribuciones · Misiones — Dashboard de Rechazos v1.0

@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.config import settings
-from app.routers import comentarios, mapeo, rechazos, sync
+from app.routers import comentarios, mapeo, mensual, rechazos, sync
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 
@@ -45,6 +45,7 @@ def health():
 
 
 app.include_router(rechazos.router)
+app.include_router(mensual.router)
 app.include_router(sync.router)
 app.include_router(mapeo.router)
 app.include_router(comentarios.router)

@@ -1409,3 +1409,285 @@ th.num {
   opacity: 0.55;
   cursor: default;
 }
+
+/* =========================================================================
+   Solapa 2 — Resumen mensual (evolución del rechazo y % sobre la venta)
+   ========================================================================= */
+
+.solapas {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 14px;
+}
+
+.solapa {
+  border: 0;
+  background: transparent;
+  padding: 9px 16px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--muted);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: color 0.12s, border-color 0.12s;
+}
+
+.solapa:hover {
+  color: var(--ink);
+}
+
+.solapa.on {
+  color: var(--brand);
+  border-bottom-color: var(--brand);
+}
+
+.kpis-4 {
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+}
+
+.kpi.b-pct {
+  border-left-color: var(--danger);
+}
+.kpi.b-hl {
+  border-left-color: var(--localidad);
+}
+
+.panel + .panel {
+  margin-top: 16px;
+}
+
+.panel-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.panel-head h2 {
+  font-size: 13.5px;
+  font-weight: 700;
+}
+
+.panel-head .panel-sub {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+/* ---------- Gráficos (SVG propio) ---------- */
+.chart-wrap {
+  position: relative;
+}
+
+.chart-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  overflow: visible;
+}
+
+.chart-vacio {
+  padding: 26px 4px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+/* Grilla recesiva: la línea base se ve algo más que el resto. */
+.cx-grid {
+  stroke: var(--line);
+  stroke-width: 1;
+}
+.cx-base {
+  stroke: #c9cfdb;
+  stroke-width: 1;
+}
+.cx-tick,
+.cx-mes {
+  font-size: 11px;
+  fill: var(--muted);
+}
+.cx-valor {
+  font-size: 11px;
+  font-weight: 700;
+  fill: var(--ink);
+}
+.cx-barra {
+  transition: opacity 0.1s;
+}
+.cx-hit {
+  fill: transparent;
+}
+.cx-hit.activo {
+  fill: rgba(47, 76, 221, 0.05);
+}
+
+.chart-tip {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  box-shadow: var(--shadow);
+  padding: 8px 10px;
+  font-size: 12px;
+  min-width: 168px;
+  pointer-events: none;
+}
+
+.chart-tip .tip-tit {
+  font-weight: 700;
+  text-transform: capitalize;
+}
+
+.chart-tip .tip-total {
+  font-size: 16px;
+  font-weight: 800;
+  margin: 1px 0 5px;
+}
+
+.chart-tip .tip-fila {
+  display: grid;
+  grid-template-columns: 10px 1fr auto;
+  align-items: center;
+  gap: 6px;
+  line-height: 1.55;
+}
+
+.chart-tip .tip-cla {
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chart-tip .tip-val {
+  font-weight: 700;
+}
+
+.tip-punto,
+.leg-punto {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 3px;
+  flex: none;
+}
+
+/* ---------- Leyenda (identidad nunca queda solo en el color) ---------- */
+.leyenda {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.leg {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  border-radius: 20px;
+  padding: 4px 11px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.leg.on {
+  border-color: var(--brand);
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+
+.leg.estatico {
+  color: var(--muted);
+}
+
+/* ---------- Tablas del resumen ---------- */
+.tabla-scroll {
+  overflow-x: auto;
+}
+
+.tabla-mensual {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+
+.tabla-mensual th {
+  text-align: left;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: var(--muted);
+  border-bottom: 1px solid var(--line);
+  padding: 7px 9px;
+  white-space: nowrap;
+}
+
+.tabla-mensual td {
+  padding: 7px 9px;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+.tabla-mensual th.n,
+.tabla-mensual td.n {
+  text-align: right;
+}
+
+.tabla-mensual td.mes {
+  font-weight: 700;
+  text-transform: capitalize;
+}
+
+.tabla-mensual td.destac {
+  font-weight: 700;
+}
+
+.tabla-mensual tbody tr:hover {
+  background: #f7f8fc;
+}
+
+.tabla-mensual tr.sel {
+  background: var(--brand-soft);
+}
+
+.tabla-mensual tfoot td {
+  font-weight: 800;
+  border-top: 2px solid var(--line);
+  border-bottom: 0;
+}
+
+.barra-mini {
+  display: inline-block;
+  width: 74px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--line);
+  margin-right: 7px;
+  vertical-align: middle;
+  overflow: hidden;
+}
+
+.barra-mini i {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+}
+
+.banner.warn {
+  background: #fdf6e7;
+  border-color: #f0d9a8;
+  color: #8a5b09;
+}
+
+/* El punto de color de la tabla de motivos necesita aire contra la etiqueta. */
+.tabla-mensual td .leg-punto {
+  margin-right: 7px;
+}

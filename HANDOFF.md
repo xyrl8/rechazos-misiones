@@ -88,6 +88,24 @@ respuestas no-streaming de Vercel se cortan a ~300s):
 > conexión: se puede disparar un sync largo y verificar el resultado después con
 > `GET /api/sync/estado` (devuelve cobertura + conteo de referencias).
 
+### Backfill de la solapa 2 (hectolitros + % de rechazo)
+
+Dos backfills distintos, en este orden:
+
+1. `POST /api/sync/init-db` — aplica los `ALTER` nuevos (`hl_rechazados`,
+   `ref_articulos.hl_bulto`, tabla `ventas_dia`). **Hacerlo apenas se deploya el
+   backend**: hasta que corra, el sync del día falla por columna inexistente.
+2. `POST /api/sync/backfill-hl` — HL histórico de los rechazos. Segundos: lee el
+   `unimedtotal` del `raw` ya guardado, no vuelve a consultar Chess.
+3. `POST /api/sync/ventas?desde=&hasta=` — denominador del %. Sí baja de Chess,
+   ~5s por día desde `gru1`: conviene ir por tramos de ~12 días (la función corta
+   a 800s). **No toca `rechazos`**, así que no reescribe lo publicado.
+   El año 2026 completo son ~18 tramos, unos 20 minutos.
+
+Mientras un mes tenga la venta cargada a medias, `/api/mensual` lo devuelve con
+`parcial: true` y el tablero lo muestra atenuado y con asterisco: el % de ese mes
+está sobreestimado (rechazo completo ÷ venta parcial).
+
 ## Notas de negocio
 
 - `fechahasta` de GESCOM es exclusivo (se compensa con `D+1` en el código).

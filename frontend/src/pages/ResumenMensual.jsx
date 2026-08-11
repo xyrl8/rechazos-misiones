@@ -366,7 +366,7 @@ export default function ResumenMensual() {
               formatoEje={(v) =>
                 new Intl.NumberFormat("es-AR", { maximumFractionDigits: 2 }).format(v) + "%"}
               objetivo={objetivo}
-              objetivoTexto={`objetivo ${pctTxt(objetivo)} (PBI)`}
+              objetivoTexto={`objetivo Misiones ${pctTxt(objetivo)}`}
               vacio={D.key === "reparto"
                 ? "Sin reparto en camión cargado en el período: el % necesita denominador."
                 : "Sin venta cargada en el período: el % necesita denominador."}

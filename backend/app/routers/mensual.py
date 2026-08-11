@@ -66,6 +66,8 @@ MOTIVOS_VENTAS = {"SIN DINERO", "ERROR DE PREVENTA", "FECHA CORTA", "NO PEDIDO",
 
 # Objetivo del PBI para el % de rechazo (vista VENDEDORES). Viaja al frontend
 # para dibujar la linea de referencia.
+# 🚨 Es el objetivo DE MISIONES, no un target general de Quilmes (confirmado por
+# Enzo, 2026-08-11): si esto se replica en otra distribuidora, el numero cambia.
 OBJETIVO_PCT = 1.29
 
 

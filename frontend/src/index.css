@@ -1514,8 +1514,24 @@ th.num {
   font-weight: 700;
   fill: var(--ink);
 }
+.cx-valor.sobre {
+  fill: #b3261e;
+}
 .cx-barra {
   transition: opacity 0.1s;
+}
+
+/* Línea de objetivo (el 1,29 % del PBI de Quilmes). Punteada y rotulada: no
+   compite con las barras pero se lee dónde corta cada una. */
+.cx-objetivo line {
+  stroke: #b3261e;
+  stroke-width: 1.5;
+  stroke-dasharray: 6 4;
+}
+.cx-objetivo text {
+  font-size: 11px;
+  font-weight: 700;
+  fill: #b3261e;
 }
 .cx-hit {
   fill: transparent;
@@ -1687,9 +1703,37 @@ th.num {
   color: #8a5b09;
 }
 
+.banner.info {
+  background: #eef4fd;
+  border-color: #c3d7f4;
+  color: #1c4a86;
+}
+
 /* El punto de color de la tabla de motivos necesita aire contra la etiqueta. */
 .tabla-mensual td .leg-punto {
   margin-right: 7px;
+}
+
+/* Imputación del motivo (switch VENTAS / DISTRIBUCIÓN del PBI). Etiqueta con
+   texto, no sólo color: se lee igual en blanco y negro. */
+.tag-v,
+.tag-d {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  border: 1px solid;
+}
+.tag-v {
+  background: #eef4fd;
+  border-color: #c3d7f4;
+  color: #1c4a86;
+}
+.tag-d {
+  background: #f4f5f7;
+  border-color: #dcdfe5;
+  color: #5a616e;
 }
 
 /* % calculado contra una venta cargada a medias: se muestra, pero atenuado. */

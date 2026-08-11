@@ -21,6 +21,25 @@ const COLORES = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300
 const COLOR_OTROS = "#98a1b3";
 const TOP_MOTIVOS = 6;
 
+// Denominador del %. `reparto` es el criterio del PBI oficial de Quilmes: mide
+// contra lo que salió en CAMIÓN PROPIO. `total` es toda la venta facturada
+// (incluye mostrador, retiro y fleteros) y da un % ~3 veces menor: sirve para
+// leer el peso del rechazo sobre el negocio, NO para comparar con el PBI.
+const DENOMINADORES = [
+  { key: "reparto", label: "Reparto en camión", sub: "criterio PBI Quilmes",
+    hint: "repartidos en camión" },
+  { key: "total", label: "Venta total facturada", sub: "incluye mostrador y retiro",
+    hint: "vendidos" },
+];
+
+// Switch VENTAS / DISTRIBUCIÓN del PBI: no cambia la dimensión, cambia QUÉ
+// MOTIVOS entran. El objetivo de 1,29 % se mide contra la vista de ventas.
+const VISTAS = [
+  { key: "todos", label: "Todos" },
+  { key: "ventas", label: "Ventas", sub: "imputable a preventa" },
+  { key: "distribucion", label: "Distribución", sub: "no imputable a preventa" },
+];
+
 const pctTxt = (v) =>
   v === null || v === undefined
     ? "—"
@@ -37,15 +56,28 @@ export default function ResumenMensual() {
     supervisor: "",
     vendedor: "",
     motivo: "",
+    denominador: "reparto",
+    vista: "todos",
   });
-  const [unidad, setUnidad] = useState("bultos");
+  const [unidad, setUnidad] = useState("hl");
   const [data, setData] = useState(null);
   const [opciones, setOpciones] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   const U = UNIDADES.find((u) => u.key === unidad) || UNIDADES[0];
+  const D = DENOMINADORES.find((d) => d.key === filtros.denominador) || DENOMINADORES[0];
   const setCampo = (campo, valor) => setFiltros((f) => ({ ...f, [campo]: valor }));
+
+  // Las dos columnas de venta viajan siempre; el sufijo elige cuál se muestra
+  // (el % ya viene calculado con el denominador pedido).
+  const sufDen = D.key === "reparto" ? "_reparto" : "";
+  const venta = (fila, u = unidad) => fila?.[`venta_${u}${sufDen}`];
+
+  // El objetivo del PBI (1,29 %) está definido en HECTOLITROS y contra el
+  // reparto: dibujarlo sobre otra unidad o sobre la venta total sería comparar
+  // contra una vara que no es la suya.
+  const objetivo = D.key === "reparto" && unidad === "hl" ? data?.objetivo_pct || null : null;
 
   useEffect(() => {
     let cancel = false;
@@ -125,8 +157,12 @@ export default function ResumenMensual() {
   );
 
   const k = data?.kpis;
-  const sinVenta = !!data && !Number(k?.venta_bultos) && !Number(k?.venta_importe);
+  const sinVenta = !!data && !Number(venta(k, "bultos")) && !Number(venta(k, "importe"));
   const parciales = (data?.meses || []).filter((m) => m.parcial);
+  // El corte por camión se completa al re-sincronizar la venta: hasta que eso
+  // corra para un período, ese denominador está vacío y el % no se puede
+  // mostrar. Se distingue de "no hubo reparto" con la cobertura del backend.
+  const sinReparto = D.key === "reparto" && !!data && !Number(data.cobertura_venta?.filas_reparto);
 
   return (
     <>
@@ -197,6 +233,36 @@ export default function ResumenMensual() {
         </div>
 
         <div className="field">
+          <label>% calculado sobre</label>
+          <div className="toggle">
+            {DENOMINADORES.map((d) => (
+              <button key={d.key}
+                      className={filtros.denominador === d.key ? "active" : ""}
+                      data-f={filtros.denominador === d.key ? "TODO" : ""}
+                      title={d.sub}
+                      onClick={() => setCampo("denominador", d.key)}>
+                {d.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="field">
+          <label>Motivos</label>
+          <div className="toggle">
+            {VISTAS.map((v) => (
+              <button key={v.key}
+                      className={filtros.vista === v.key ? "active" : ""}
+                      data-f={filtros.vista === v.key ? "TODO" : ""}
+                      title={v.sub}
+                      onClick={() => setCampo("vista", v.key)}>
+                {v.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="field">
           <label>Unidad</label>
           <div className="toggle">
             {UNIDADES.map((u) => (
@@ -220,11 +286,27 @@ export default function ResumenMensual() {
 
       {error && <div className="banner err">No se pudo cargar el resumen: {error}</div>}
 
-      {sinVenta && !loading && (
+      {sinReparto && !loading ? (
         <div className="banner warn">
-          No hay venta cargada para este período, así que el <b>%</b> no se puede
-          calcular (sí los volúmenes). La venta se completa sincronizando el
-          período desde la solapa de seguimiento.
+          Todavía no está cargado el <b>reparto en camión</b> como denominador:
+          se completa re-sincronizando la venta del período
+          (<code>POST /api/sync/ventas</code>). Mientras tanto se puede leer el %
+          sobre la venta total facturada.
+        </div>
+      ) : sinVenta && !loading && (
+        <div className="banner warn">
+          No hay {D.key === "reparto" ? "reparto en camión" : "venta"} cargado para
+          este período, así que el <b>%</b> no se puede calcular (sí los volúmenes).
+          La venta se completa sincronizando el período desde la solapa de seguimiento.
+        </div>
+      )}
+
+      {D.key === "reparto" && !loading && !sinReparto && (
+        <div className="banner info">
+          El <b>%</b> se mide contra los hectolitros que salieron en <b>camión
+          propio</b>, igual que el PBI de Quilmes: quedan afuera mostrador, retiro,
+          fleteros, refuerzos y segundas vueltas de refuerzo. Con la venta total
+          facturada el mismo rechazo da un % unas tres veces menor.
         </div>
       )}
 
@@ -246,23 +328,24 @@ export default function ResumenMensual() {
               <div className="label">% de rechazo · {U.label}</div>
               <div className="value">{pctTxt(k[`pct_${unidad}`])}</div>
               <div className="hint">
-                {U.fmt(k[unidad])} sobre {U.fmt(k[`venta_${unidad}`])} vendidos
+                {U.fmt(k[unidad])} sobre {U.fmt(venta(k))} {D.hint}
+                {objetivo ? ` · objetivo ${pctTxt(objetivo)}` : ""}
               </div>
             </div>
             <div className="kpi b-bultos">
               <div className="label">Bultos rechazados</div>
               <div className="value">{dec(k.bultos)}</div>
-              <div className="hint">{pctTxt(k.pct_bultos)} de la venta</div>
+              <div className="hint">{pctTxt(k.pct_bultos)} de lo {D.hint}</div>
             </div>
             <div className="kpi b-hl">
               <div className="label">Hectolitros rechazados</div>
               <div className="value">{dec(k.hl)}</div>
-              <div className="hint">{pctTxt(k.pct_hl)} de la venta</div>
+              <div className="hint">{pctTxt(k.pct_hl)} de lo {D.hint}</div>
             </div>
             <div className="kpi b-importe">
               <div className="label">Valorizado rechazado</div>
               <div className="value">{moneyCompact(k.importe)}</div>
-              <div className="hint">{pctTxt(k.pct_importe)} de la venta</div>
+              <div className="hint">{pctTxt(k.pct_importe)} de lo {D.hint}</div>
             </div>
           </div>
 
@@ -271,7 +354,8 @@ export default function ResumenMensual() {
             <div className="panel-head">
               <h2>% de rechazo por mes · {U.label}</h2>
               <span className="panel-sub">
-                rechazo ÷ venta del mismo mes
+                rechazo ÷ {D.key === "reparto" ? "lo despachado en camión propio" : "venta total"} del mismo mes
+                {filtros.vista !== "todos" ? ` · motivos de ${filtros.vista}` : ""}
                 {filtros.motivo ? ` · sólo motivo ${filtros.motivo}` : ""}
               </span>
             </div>
@@ -281,7 +365,11 @@ export default function ResumenMensual() {
               formato={(v) => pctTxt(v)}
               formatoEje={(v) =>
                 new Intl.NumberFormat("es-AR", { maximumFractionDigits: 2 }).format(v) + "%"}
-              vacio="Sin venta cargada en el período: el % necesita denominador."
+              objetivo={objetivo}
+              objetivoTexto={`objetivo ${pctTxt(objetivo)} (PBI)`}
+              vacio={D.key === "reparto"
+                ? "Sin reparto en camión cargado en el período: el % necesita denominador."
+                : "Sin venta cargada en el período: el % necesita denominador."}
             />
           </div>
 
@@ -323,7 +411,11 @@ export default function ResumenMensual() {
           <div className="panel">
             <div className="panel-head">
               <h2>Detalle mensual</h2>
-              <span className="panel-sub">venta bruta facturada como denominador</span>
+              <span className="panel-sub">
+                {D.key === "reparto"
+                  ? "denominador: HL despachados en camión propio (criterio PBI)"
+                  : "denominador: venta bruta facturada"}
+              </span>
             </div>
             <div className="tabla-scroll">
               <table className="tabla-mensual">
@@ -388,8 +480,9 @@ export default function ResumenMensual() {
                 <thead>
                   <tr>
                     <th>Motivo</th>
+                    <th className="n">Imputable a</th>
                     <th className="n">Rechazo</th>
-                    <th className="n">% de la venta</th>
+                    <th className="n">% de lo {D.hint}</th>
                     <th className="n">Participación</th>
                     <th className="n">Eventos</th>
                     <th className="n">Clientes</th>
@@ -409,6 +502,13 @@ export default function ResumenMensual() {
                           <span className="leg-punto"
                                 style={{ background: colorMotivo.get(m.motivo) || COLOR_OTROS }} />
                           {m.motivo}
+                        </td>
+                        <td className="n">
+                          {/* Es la clasificación que usa el switch VENTAS /
+                              DISTRIBUCIÓN del PBI, visible fila por fila. */}
+                          <span className={m.imputable === "ventas" ? "tag-v" : "tag-d"}>
+                            {m.imputable === "ventas" ? "Ventas" : "Distribución"}
+                          </span>
                         </td>
                         <td className="n">{U.fmt(parte)}</td>
                         <td className="n destac">{pctTxt(m[`pct_${unidad}`])}</td>

@@ -9,6 +9,7 @@ Definicion de "rechazo":
 """
 import json
 import logging
+import re
 import unicodedata
 from datetime import date, datetime, timedelta
 from typing import Dict, List
@@ -32,7 +33,8 @@ RECHAZO_COLS = [
 ]
 
 VENTA_COLS = ["fuente", "fecha", "id_vendedor", "vendedor", "supervisor",
-              "lineas", "bultos", "hl", "importe"]
+              "lineas", "bultos", "hl", "importe",
+              "bultos_reparto", "hl_reparto", "importe_reparto"]
 
 # --- Reglas de exclusion (no son rechazos comerciales a repasar) ---
 # Motivos que se descartan (devoluciones por tramites internos, no del cliente).
@@ -45,6 +47,33 @@ GESCOM_CLIENTE_EXCLUIR_KEYWORDS = ("ESPECIAL",)
 # descartan sus rechazos y, con ellos, los clientes afectados.
 PROMOTOR_EXCLUIR = {"VI ELDO", "MOSTRADOR IGUAZU", "MOSTRADOR ELDORADO",
                     "MOSTRADOR 100", "VI PEOPLE", "VI MD"}
+
+# Patente argentina: vieja (ABC123) o Mercosur (AB123CD). Chess las escribe con
+# o sin espacio ("OJA 408", "AE591EV") y le agrega ".2" a la segunda vuelta del
+# mismo camion.
+_PATENTE_RE = re.compile(r"^(?:[A-Z]{3}\d{3}|[A-Z]{2}\d{3}[A-Z]{2})$")
+
+
+def es_reparto_camion(transporte: str) -> bool:
+    """¿Esa línea salió a la calle en un camión propio?
+
+    Es el criterio del PBI de Quilmes para el denominador del % de rechazo: se
+    mide contra lo que efectivamente subió a un camión nuestro. `dsFleteroCarga`
+    trae la patente cuando el reparto es propio, y una etiqueta ("SEGUNDA
+    VUELTA", "REFUERZO", "TRANSPORTE ALTERNATIVO") o nada cuando no lo es.
+
+    Se exige que PAREZCA una patente en vez de descartar las etiquetas
+    conocidas: así una etiqueta nueva queda afuera del denominador en vez de
+    inflarlo en silencio. La segunda vuelta del mismo camión (sufijo ".2") SÍ
+    cuenta — es el mismo camión saliendo otra vez, y el numerador también la
+    incluye.
+    """
+    t = (transporte or "").strip().upper()
+    if not t:
+        return False
+    t = t.split(".")[0]                       # "HJR 136.2" -> "HJR 136"
+    return bool(_PATENTE_RE.match(re.sub(r"[^A-Z0-9]", "", t)))
+
 
 def _normaliza_motivo(motivo: str) -> str:
     """Quita el prefijo de la app BEES ("BEES - XXX" -> "XXX").
@@ -318,6 +347,9 @@ def _chess_ventas(comps: List[dict], fecha: str) -> List[dict]:
     (que la factura original ya contabilizo). Criterio por signo y no por
     `dsDocumento` para que un tipo de comprobante nuevo no quede afuera en
     silencio.
+
+    En la misma pasada se acumula la porcion despachada en CAMION PROPIO
+    (`*_reparto`), que es el denominador con el criterio del PBI de Quilmes.
     """
     acc: Dict[tuple, dict] = {}
     for c in comps:
@@ -331,15 +363,22 @@ def _chess_ventas(comps: List[dict], fecha: str) -> List[dict]:
             "vendedor": _txt(c.get("dsVendedor")) or "SIN PROMOTOR",
             "supervisor": _txt(c.get("dsSupervisor")) or "SIN SUPERVISOR",
             "lineas": 0, "bultos": 0.0, "hl": 0.0, "importe": 0.0,
+            "bultos_reparto": 0.0, "hl_reparto": 0.0, "importe_reparto": 0.0,
         })
+        hl = _num(c.get("unimedtotal"))
+        imp = _num(c.get("subtotalNeto"))
         a["lineas"] += 1
         a["bultos"] += ctot
-        a["hl"] += _num(c.get("unimedtotal"))
-        a["importe"] += _num(c.get("subtotalNeto"))
+        a["hl"] += hl
+        a["importe"] += imp
+        if es_reparto_camion(_txt(c.get("dsFleteroCarga"))):
+            a["bultos_reparto"] += ctot
+            a["hl_reparto"] += hl
+            a["importe_reparto"] += imp
     for a in acc.values():
-        a["bultos"] = round(a["bultos"], 4)
-        a["hl"] = round(a["hl"], 5)
-        a["importe"] = round(a["importe"], 2)
+        for col, dec in (("bultos", 4), ("hl", 5), ("importe", 2)):
+            a[col] = round(a[col], dec)
+            a[f"{col}_reparto"] = round(a[f"{col}_reparto"], dec)
     return list(acc.values())
 
 
@@ -362,7 +401,12 @@ def _hl_por_bulto(comps: List[dict]) -> Dict[str, float]:
 
 
 def _gescom_ventas(ventas: List[dict], fecha: str, hl_map: Dict[str, float]) -> List[dict]:
-    """Agrega la venta del dia de GESCOM (mostrador) por operador."""
+    """Agrega la venta del dia de GESCOM (mostrador) por operador.
+
+    Las columnas `*_reparto` quedan en 0 a proposito: GESCOM Misiones es
+    mostrador, el cliente se lleva la mercaderia, no sale en camion propio. Por
+    eso el denominador "reparto" es solo de Chess.
+    """
     acc: Dict[tuple, dict] = {}
     for v in ventas:
         f = (_txt(v.get("fechaPedido")) or _txt(v.get("fechaEntrega")))[:10]
@@ -375,6 +419,7 @@ def _gescom_ventas(ventas: List[dict], fecha: str, hl_map: Dict[str, float]) -> 
             "vendedor": f"MOSTRADOR {idvend}" if idvend else "MOSTRADOR (GESCOM)",
             "supervisor": "MOSTRADOR (GESCOM)",
             "lineas": 0, "bultos": 0.0, "hl": 0.0, "importe": 0.0,
+            "bultos_reparto": 0.0, "hl_reparto": 0.0, "importe_reparto": 0.0,
         })
         for it in (v.get("items") or []):
             cant = _num(it.get("cantidad"))

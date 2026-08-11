@@ -47,10 +47,43 @@ no duplica.
   rechazo mismo), sin requests extra. Se guarda abierta por promotor + supervisor
   para poder mostrar el % por promotor sin cruzar numerador filtrado con
   denominador total.
-  ⚠️ El numerador **excluye** los rechazos marcados `excluido` y el denominador es
-  la venta completa: el % es la lectura conservadora, nunca queda inflado.
+  ⚠️ El numerador **excluye** los rechazos marcados `excluido`.
   ⚠️ El rechazo se emite como NC **1-2 días después** de la factura, así que en el
   corte de mes hay algo de desfase (se diluye en el mensual).
+
+### 🚨 El denominador por defecto es el REPARTO EN CAMIÓN, no la facturación
+
+`ventas_dia` guarda además `bultos_reparto` / `hl_reparto` / `importe_reparto`:
+la porción de esa misma venta cuyo `dsFleteroCarga` **es una patente**
+(`es_reparto_camion()` en `sync.py`). Es el criterio del **PBI oficial de
+Quilmes**, que mide el rechazo contra los HL del reparto y no contra la
+facturación, y es el que pidió el usuario (2026-08-11).
+
+Medido en **01–15/05/2026** (el tramo que publica el PBI):
+
+| Denominador | HL | % con 66,8 HL rechazados |
+|---|---|---|
+| Venta total facturada (lectura vieja) | 13.005 | 0,79 % |
+| **Reparto en camión propio** | **3.232** | **2,07 %** |
+| PBI de Quilmes | ~3.146 | 2,08 % |
+
+- 🚨 **Lo que sobraba era el denominador, no el numerador**: GESCOM (mostrador)
+  aportaba el **70 % del volumen** y no sube a ningún camión. El numerador ya
+  coincidía con el del PBI porque el sync ya excluye mostrador, `DEV X TRAM`,
+  refuerzos, transporte alternativo y segunda vuelta.
+- La **segunda vuelta del mismo camión** (patente con sufijo `.2`) SÍ cuenta, de
+  los dos lados. "SEGUNDA VUELTA" como etiqueta de transporte, no.
+- `es_reparto_camion` exige que el transporte **parezca patente** (vieja o
+  Mercosur) en vez de descartar etiquetas conocidas: una etiqueta nueva queda
+  afuera del denominador en lugar de inflarlo en silencio.
+- GESCOM escribe siempre 0 en `*_reparto`: es mostrador, el cliente se lleva la
+  mercadería.
+- Con la lista de motivos imputables a preventa (`MOTIVOS_VENTAS`, la vista
+  VENDEDORES del PBI) el mismo tramo da **1,52 %** contra el **1,55 %** que
+  publica el PBI, y ahí aplica el objetivo de **1,29 %**.
+- ⚠️ Las columnas `*_reparto` se llenan **re-sincronizando la venta**
+  (`POST /api/sync/ventas?fuentes=CHESS`). Hasta que corra para un período, ese
+  denominador está vacío y el tablero lo avisa (no muestra 0).
 
 ## APIs origen — cómo se obtienen los rechazos
 
@@ -137,9 +170,16 @@ no duplica.
 - `GET /api/resumen` — KPIs + cortes por cada dimensión + clientes críticos + tendencia.
 - `GET /api/mensual` — **solapa 2**: serie mensual (bultos / HL / valorizado +
   el % de cada uno sobre la venta), desglose por motivo y motivo×mes. Filtros:
-  `fuente`, `fecha_desde`, `fecha_hasta`, `supervisor`, `vendedor`, `motivo`.
+  `fuente`, `fecha_desde`, `fecha_hasta`, `supervisor`, `vendedor`, `motivo`,
+  `denominador`, `vista`.
   El filtro de `motivo` aplica **solo al numerador** (la venta no tiene motivo).
   `pct_* = null` significa "sin denominador cargado", no 0.
+  - `denominador=reparto` (**default**) mide contra `ventas_dia.*_reparto`;
+    `total`, contra toda la venta facturada. Las dos columnas viajan siempre en
+    la respuesta.
+  - `vista=todos|ventas|distribucion` es el switch VENTAS/DISTRIBUCIÓN del PBI:
+    filtra los MOTIVOS del numerador con la lista blanca `MOTIVOS_VENTAS`.
+  - `objetivo_pct` = 1,29 (el del PBI, definido en HL contra el reparto).
 - `POST /api/sync/backfill-hl` — rellena `hl_rechazados` del histórico leyendo el
   `raw` ya guardado (no vuelve a consultar Chess) y arma `ref_articulos.hl_bulto`.
   Protegido por `SYNC_SECRET`. Idempotente. **No** completa `ventas_dia`: para el

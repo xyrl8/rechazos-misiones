@@ -9,9 +9,15 @@ crédito). Numerador y denominador comparten los filtros de fuente, período,
 supervisor y promotor; el filtro por MOTIVO aplica solo al numerador (la
 pregunta es "cuánto de la venta se rechazó por este motivo").
 
+🚨 Hay DOS denominadores y el default es `reparto`, el del PBI de Quilmes:
+solo lo que salió en CAMIÓN PROPIO. `total` es toda la venta facturada e
+incluye mostrador, retiro y fleteros — es la lectura vieja del tablero y da un
+% tres veces menor, no comparable con el PBI ni con el objetivo de 1,29%.
+
 ⚠️ El numerador excluye los rechazos marcados `excluido` (devoluciones por
-trámite, refuerzos, mostrador) igual que el resto del tablero; el denominador es
-la venta completa. Es la lectura conservadora: el % nunca queda inflado.
+trámite, refuerzos, mostrador) igual que el resto del tablero. Ese recorte es
+justo el que hace el PBI, y por eso el numerador ya coincidía con el suyo antes
+de este cambio: lo único que sobraba era el denominador.
 """
 from datetime import date
 from typing import Optional
@@ -28,9 +34,37 @@ UNIDADES = [("bultos", "bultos_rechazados", "bultos"),
             ("hl", "hl_rechazados", "hl"),
             ("importe", "importe_rechazado", "importe")]
 
+# --- Criterio del PBI oficial de Quilmes ---------------------------------
+# `denominador=reparto` mide contra lo que salio en CAMION PROPIO (columnas
+# `*_reparto` de ventas_dia) en vez de contra toda la venta facturada. Es la
+# unica forma de comparar el numero con el PBI: su "% HL Rechazados" se calcula
+# sobre los HL del reparto, no sobre la facturacion. Validado contra el PBI en
+# 01-15/05/2026: 66,8 HL / 3.232 HL = 2,07% (el PBI publica 2,08%).
+DENOMINADORES = {"total": "", "reparto": "_reparto"}
 
-def _where_rechazos(fuente, desde, hasta, supervisor, vendedor, motivo):
+# Motivos imputables a PREVENTA. Es la vista "VENDEDORES" del PBI, y es contra
+# ella que se mide el objetivo del 1,29%. La lista se dedujo del PBI publicado
+# (⏳ falta que Quilmes confirme la oficial). Los motivos llegan normalizados
+# por el sync (sin el prefijo "BEES - ").
+# 🚨 Lista BLANCA a proposito: un motivo nuevo cae en DISTRIBUCION, no en
+# VENTAS. Es preferible subestimar lo imputable a preventa que atribuirle algo
+# que nadie decidio.
+MOTIVOS_VENTAS = {"SIN DINERO", "ERROR DE PREVENTA", "FECHA CORTA", "NO PEDIDO",
+                  "PEDIDO DUPLICADO", "SIN ENVASES"}
+
+# Objetivo del PBI para el % de rechazo (vista VENDEDORES). Viaja al frontend
+# para dibujar la linea de referencia.
+OBJETIVO_PCT = 1.29
+
+
+def _where_rechazos(fuente, desde, hasta, supervisor, vendedor, motivo, vista="todos"):
     where, params = ["excluido = false", "fecha >= %s", "fecha <= %s"], [desde, hasta]
+    if vista == "ventas":
+        where.append("motivo = ANY(%s)")
+        params.append(sorted(MOTIVOS_VENTAS))
+    elif vista == "distribucion":
+        where.append("NOT (motivo = ANY(%s))")
+        params.append(sorted(MOTIVOS_VENTAS))
     if fuente and fuente.upper() != "TODO":
         where.append("fuente = %s")
         params.append(fuente.upper())
@@ -69,10 +103,15 @@ def _pct(num, den):
     return round(float(num or 0) * 100.0 / float(den), 2)
 
 
-def _con_pct(fila):
-    """Agrega pct_bultos / pct_hl / pct_importe a una fila que ya trae ambos lados."""
+def _con_pct(fila, sufijo=""):
+    """Agrega pct_bultos / pct_hl / pct_importe a una fila que ya trae ambos lados.
+
+    `sufijo` elige el denominador: "" = toda la venta facturada, "_reparto" =
+    solo lo despachado en camion propio (criterio del PBI). Las dos columnas
+    viajan siempre en la respuesta, asi el frontend puede mostrar de donde sale
+    el numero sin pedir de nuevo."""
     for clave, _col, vcol in UNIDADES:
-        fila[f"pct_{clave}"] = _pct(fila.get(clave), fila.get(f"venta_{vcol}"))
+        fila[f"pct_{clave}"] = _pct(fila.get(clave), fila.get(f"venta_{vcol}{sufijo}"))
     return fila
 
 
@@ -84,13 +123,18 @@ def mensual(
     supervisor: Optional[str] = Query(None),
     vendedor: Optional[str] = Query(None),
     motivo: Optional[str] = Query(None),
+    denominador: str = Query("reparto"),
+    vista: str = Query("todos"),
 ):
     """Serie mensual del rechazo + desglose por motivo, en las tres unidades."""
     hoy = date.today()
     desde = fecha_desde or date(hoy.year, 1, 1).isoformat()
     hasta = fecha_hasta or hoy.isoformat()
+    denominador = denominador if denominador in DENOMINADORES else "reparto"
+    vista = vista if vista in ("todos", "ventas", "distribucion") else "todos"
+    suf = DENOMINADORES[denominador]
 
-    w_r, p_r = _where_rechazos(fuente, desde, hasta, supervisor, vendedor, motivo)
+    w_r, p_r = _where_rechazos(fuente, desde, hasta, supervisor, vendedor, motivo, vista)
     w_v, p_v = _where_ventas(fuente, desde, hasta, supervisor, vendedor)
 
     conn = get_conn()
@@ -116,7 +160,10 @@ def mensual(
                    COUNT(DISTINCT fecha)     AS dias_venta,
                    COALESCE(SUM(bultos), 0)  AS venta_bultos,
                    COALESCE(SUM(hl), 0)      AS venta_hl,
-                   COALESCE(SUM(importe), 0) AS venta_importe
+                   COALESCE(SUM(importe), 0) AS venta_importe,
+                   COALESCE(SUM(bultos_reparto), 0)  AS venta_bultos_reparto,
+                   COALESCE(SUM(hl_reparto), 0)      AS venta_hl_reparto,
+                   COALESCE(SUM(importe_reparto), 0) AS venta_importe_reparto
             FROM ventas_dia{w_v}
             GROUP BY 1 ORDER BY 1""", p_v)
         venta_mes = {r["mes"]: r for r in cur.fetchall()}
@@ -142,7 +189,10 @@ def mensual(
                 "venta_bultos": v.get("venta_bultos", 0),
                 "venta_hl": v.get("venta_hl", 0),
                 "venta_importe": v.get("venta_importe", 0),
-            }))
+                "venta_bultos_reparto": v.get("venta_bultos_reparto", 0),
+                "venta_hl_reparto": v.get("venta_hl_reparto", 0),
+                "venta_importe_reparto": v.get("venta_importe_reparto", 0),
+            }, suf))
 
         # --- Totales del período ---
         cur.execute(f"""
@@ -156,10 +206,13 @@ def mensual(
         cur.execute(f"""
             SELECT COALESCE(SUM(bultos), 0)  AS venta_bultos,
                    COALESCE(SUM(hl), 0)      AS venta_hl,
-                   COALESCE(SUM(importe), 0) AS venta_importe
+                   COALESCE(SUM(importe), 0) AS venta_importe,
+                   COALESCE(SUM(bultos_reparto), 0)  AS venta_bultos_reparto,
+                   COALESCE(SUM(hl_reparto), 0)      AS venta_hl_reparto,
+                   COALESCE(SUM(importe_reparto), 0) AS venta_importe_reparto
             FROM ventas_dia{w_v}""", p_v)
         kpis.update(cur.fetchone())
-        _con_pct(kpis)
+        _con_pct(kpis, suf)
 
         # --- Desglose por motivo del período (el % es sobre la MISMA venta
         # total: cada motivo aporta su porción del % global).
@@ -174,10 +227,11 @@ def mensual(
             GROUP BY 1 ORDER BY importe DESC""", p_r)
         por_motivo = []
         for r in cur.fetchall():
-            r["venta_bultos"] = kpis["venta_bultos"]
-            r["venta_hl"] = kpis["venta_hl"]
-            r["venta_importe"] = kpis["venta_importe"]
-            por_motivo.append(_con_pct(r))
+            for u in ("bultos", "hl", "importe"):
+                r[f"venta_{u}"] = kpis[f"venta_{u}"]
+                r[f"venta_{u}_reparto"] = kpis[f"venta_{u}_reparto"]
+            r["imputable"] = "ventas" if r["motivo"] in MOTIVOS_VENTAS else "distribucion"
+            por_motivo.append(_con_pct(r, suf))
 
         # --- Motivo x mes: alimenta el gráfico apilado y el filtro visual.
         cur.execute(f"""
@@ -190,12 +244,20 @@ def mensual(
         motivos_mes = cur.fetchall()
 
         # Cobertura del denominador: sin venta cargada el % no se puede mostrar.
-        cur.execute("SELECT MIN(fecha) AS desde, MAX(fecha) AS hasta, COUNT(*) AS filas FROM ventas_dia")
+        # `filas_reparto` distingue "no hubo reparto" de "todavia no se
+        # re-sincronizo la venta con el corte por camion".
+        cur.execute("""SELECT MIN(fecha) AS desde, MAX(fecha) AS hasta, COUNT(*) AS filas,
+                              COUNT(*) FILTER (WHERE hl_reparto > 0) AS filas_reparto,
+                              MAX(fecha) FILTER (WHERE hl_reparto > 0) AS hasta_reparto
+                       FROM ventas_dia""")
         cobertura = cur.fetchone()
 
         return {
             "filtros": {"fuente": fuente, "fecha_desde": desde, "fecha_hasta": hasta,
-                        "supervisor": supervisor, "vendedor": vendedor, "motivo": motivo},
+                        "supervisor": supervisor, "vendedor": vendedor, "motivo": motivo,
+                        "denominador": denominador, "vista": vista},
+            "objetivo_pct": OBJETIVO_PCT,
+            "motivos_ventas": sorted(MOTIVOS_VENTAS),
             "kpis": kpis,
             "meses": meses,
             "por_motivo": por_motivo,

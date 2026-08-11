@@ -165,6 +165,18 @@ CREATE TABLE IF NOT EXISTS ventas_dia (
 
 CREATE INDEX IF NOT EXISTS idx_ventas_dia_fecha ON ventas_dia (fecha);
 
+-- Denominador ALTERNATIVO: la porcion de esa venta que salio a la calle en
+-- CAMION PROPIO (`dsFleteroCarga` = patente). Es el criterio del PBI oficial de
+-- Quilmes ("% HL Rechazados" = rechazado / HL del reparto) y deja afuera lo que
+-- nunca subio a un camion nuestro: mostrador (GESCOM), retiro, fleteros,
+-- refuerzos y transporte alternativo. Medido 01-15/05/2026: 3.232 HL contra los
+-- 13.005 HL de la venta total -> el % pasa de 0,79% a 2,07% (PBI: 2,08%).
+-- Se guarda como columnas de la misma fila y no como tabla aparte porque sale
+-- de las MISMAS lineas, en la misma pasada del sync.
+ALTER TABLE ventas_dia ADD COLUMN IF NOT EXISTS bultos_reparto  NUMERIC NOT NULL DEFAULT 0;
+ALTER TABLE ventas_dia ADD COLUMN IF NOT EXISTS hl_reparto      NUMERIC NOT NULL DEFAULT 0;
+ALTER TABLE ventas_dia ADD COLUMN IF NOT EXISTS importe_reparto NUMERIC NOT NULL DEFAULT 0;
+
 CREATE TABLE IF NOT EXISTS sync_log (
     id         BIGSERIAL PRIMARY KEY,
     fuente     TEXT,

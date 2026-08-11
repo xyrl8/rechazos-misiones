@@ -106,6 +106,17 @@ Mientras un mes tenga la venta cargada a medias, `/api/mensual` lo devuelve con
 `parcial: true` y el tablero lo muestra atenuado y con asterisco: el % de ese mes
 está sobreestimado (rechazo completo ÷ venta parcial).
 
+### Denominador "reparto en camión" (criterio PBI) — backfill
+
+Las columnas `ventas_dia.*_reparto` son el denominador por defecto de la solapa
+2 (ver `CLAUDE.md`). Para poblarlas en el histórico:
+
+1. `POST /api/sync/init-db` — agrega las tres columnas (idempotente).
+2. `POST /api/sync/ventas?desde=&hasta=&fuentes=CHESS` — re-escribe `ventas_dia`
+   de Chess con el corte por camión. **Sólo CHESS**: GESCOM es mostrador y
+   siempre aporta 0 al reparto, así que pedirlo sólo alarga la corrida.
+   Tramos de ~15 días (la función corta a 800 s). No toca `rechazos`.
+
 ## Notas de negocio
 
 - `fechahasta` de GESCOM es exclusivo (se compensa con `D+1` en el código).

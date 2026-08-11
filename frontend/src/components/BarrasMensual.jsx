@@ -42,6 +42,8 @@ export default function BarrasMensual({
   etiquetasArriba = true,
   alto = 260,
   vacio = "Sin datos en el período",
+  objetivo = null,     // línea de referencia (ej. el 1,29% del PBI)
+  objetivoTexto = "",  // rótulo de esa línea
 }) {
   const [hover, setHover] = useState(null);
   const fmtEje = formatoEje || formato;
@@ -53,10 +55,12 @@ export default function BarrasMensual({
   const innerH = H - M.top - M.bottom;
 
   const { tope, ticks } = useMemo(() => {
-    const max = Math.max(0, ...(data || []).map((d) => d.total || 0));
+    // El objetivo entra en el cálculo del tope: una línea de referencia que
+    // queda fuera del gráfico no sirve de referencia.
+    const max = Math.max(0, objetivo || 0, ...(data || []).map((d) => d.total || 0));
     const t = topeLindo(max);
     return { tope: t, ticks: [0, 0.25, 0.5, 0.75, 1].map((f) => t * f) };
-  }, [data]);
+  }, [data, objetivo]);
 
   if (!data || !data.length) return <div className="chart-vacio">{vacio}</div>;
 
@@ -64,6 +68,7 @@ export default function BarrasMensual({
   // Barra fina: ocupa como mucho el 55% del paso y nunca más de 46px.
   const ancho = Math.min(46, paso * 0.55);
   const y = (v) => M.top + innerH - (innerH * (v || 0)) / tope;
+  const supera = (d) => objetivo > 0 && (d.total || 0) > objetivo;
 
   return (
     <div className="chart-wrap">
@@ -108,8 +113,11 @@ export default function BarrasMensual({
               ))}
               {etiquetasArriba && d.total > 0 && (
                 <text x={x + ancho / 2} y={y(d.total) - 7}
-                      className="cx-valor" textAnchor="middle">
-                  {formato(d.total)}
+                      className={supera(d) ? "cx-valor sobre" : "cx-valor"}
+                      textAnchor="middle">
+                  {/* ▲ = superó el objetivo. La marca va SIEMPRE con el valor:
+                      el color solo no alcanza para leer el estado. */}
+                  {supera(d) ? "▲ " : ""}{formato(d.total)}
                 </text>
               )}
               <text x={M.left + paso * i + paso / 2} y={H - 10}
@@ -119,6 +127,17 @@ export default function BarrasMensual({
             </g>
           );
         })}
+
+        {/* Línea de objetivo: se dibuja ENCIMA de las barras para que se lea
+            dónde corta cada una. */}
+        {objetivo > 0 && (
+          <g className="cx-objetivo">
+            <line x1={M.left} x2={W - M.right} y1={y(objetivo)} y2={y(objetivo)} />
+            <text x={W - M.right} y={y(objetivo) - 6} textAnchor="end">
+              {objetivoTexto || `objetivo ${objetivo}`}
+            </text>
+          </g>
+        )}
       </svg>
 
       {hover && (

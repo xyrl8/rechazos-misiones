@@ -119,6 +119,24 @@ Medido en **01–15/05/2026** (el tramo que publica el PBI):
    (a) mapeo manual `cliente_supervisor_manual`; (b) match por nombre de cliente
    contra `ref_cliente_supervisor` (armado con los comprobantes de Chess, que
    traen cliente+supervisor — sin requests extra); (c) `MOSTRADOR (GESCOM)`.
+3b. 🚨 **REFACTURACIÓN ≠ rechazo** (`claves_refacturadas`, 2026-08-11). Cuando
+   se factura mal, Chess emite una NC que anula la factura y vuelve a facturar
+   lo mismo: la NC lleva `cantidadesRechazo` y entraba como rechazo, pero la
+   mercadería nunca volvió. Se marca `excluido` con razón `refacturacion`.
+   - **No se distingue por el motivo, sino por las facturas espejo.** Un rechazo
+     real también tiene una factura del mismo importe que la NC — es la que la
+     NC anula. La refacturación tiene **dos o más**. Filtrar por motivo NO sirve:
+     el PBI cuenta `MAL FACTURADO` como rechazo imputable a ventas, y sacarlo
+     entero alejaba abril (1,38 → 1,19 contra el 1,42 del PBI).
+   - Impacto 2026: **159 filas, ~69 HL = 7 % del rechazo del año**; el 60 % cae
+     en enero (el 27/01, cliente GARCIA DOMINGA, 300 bultos en una sola
+     refacturación). El año pasó de 1,43 % a **1,34 %** y enero de 1,49 a 1,16.
+   - Histórico: `POST /api/sync/refacturaciones?desde=&hasta=` — sólo hace
+     UPDATE del flag, no reescribe filas publicadas. El sync diario ya las marca.
+   - 🚨 Empareja por **id_cliente + id_articulo + bultos_rechazados**, NO por
+     `linea_key`: la de las filas cargadas en mayo se armó con otra versión del
+     código y no matchea (el primer intento detectó los casos y marcó cero).
+
 3. **Exclusiones** (centralizadas en `sync.py`, se aplican en el sync):
    - Motivo que empiece con `DEV X TRAM` (devolución por trámites internos).
    - Transporte que no sea patente: contiene `ALTERNATIVO`, `REFUERZO`,

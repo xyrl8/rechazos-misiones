@@ -67,10 +67,15 @@ Medido en **01–15/05/2026** (el tramo que publica el PBI):
 | **Reparto en camión propio** | **3.232** | **2,07 %** |
 | PBI de Quilmes | ~3.146 | 2,08 % |
 
-- 🚨 **Lo que sobraba era el denominador, no el numerador**: GESCOM (mostrador)
-  aportaba el **70 % del volumen** y no sube a ningún camión. El numerador ya
-  coincidía con el del PBI porque el sync ya excluye mostrador, `DEV X TRAM`,
-  refuerzos, transporte alternativo y segunda vuelta.
+- 🚨 **El que sobraba era el denominador**: GESCOM (mostrador) aportaba el
+  **70 % del volumen** y no sube a ningún camión.
+- 🚨 **Con `denominador=reparto` el NUMERADOR también se acota al camión
+  propio** (`SQL_REPARTO_CAMION` en `mensual.py`, la versión SQL de
+  `es_reparto_camion`). Si no, los rechazos de mostrador se cuentan contra un
+  denominador que no los tiene y el % se infla: 01–15/05 daba **3,20 %** en vez
+  de 2,07 %. No hace falta re-sync: se resuelve sobre la columna `transporte`,
+  que ya está cargada. Los rechazos de GESCOM no tienen patente y quedan afuera
+  solos.
 - La **segunda vuelta del mismo camión** (patente con sufijo `.2`) SÍ cuenta, de
   los dos lados. "SEGUNDA VUELTA" como etiqueta de transporte, no.
 - `es_reparto_camion` exige que el transporte **parezca patente** (vieja o

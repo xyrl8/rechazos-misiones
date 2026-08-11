@@ -122,7 +122,13 @@ Medido en **01–15/05/2026** (el tramo que publica el PBI):
 3b. 🚨 **REFACTURACIÓN ≠ rechazo** (`claves_refacturadas`, 2026-08-11). Cuando
    se factura mal, Chess emite una NC que anula la factura y vuelve a facturar
    lo mismo: la NC lleva `cantidadesRechazo` y entraba como rechazo, pero la
-   mercadería nunca volvió. Se marca `excluido` con razón `refacturacion`.
+   mercadería nunca volvió.
+   - 🚨 Se marca en la columna **`rechazos.refacturacion`**, NO en `excluido`.
+     `excluido` lo filtran TODOS los endpoints y eso sacaba estos eventos también
+     del **detalle operativo de la solapa 1**, que es para ir a hablar con el
+     cliente: ahí un problema de facturación igual se quiere ver (Enzo,
+     2026-08-11: la solapa 1 como estaba originalmente). Sólo `/api/mensual` la
+     descuenta.
    - **No se distingue por el motivo, sino por las facturas espejo.** Un rechazo
      real también tiene una factura del mismo importe que la NC — es la que la
      NC anula. La refacturación tiene **dos o más**. Filtrar por motivo NO sirve:

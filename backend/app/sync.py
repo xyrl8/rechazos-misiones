@@ -101,6 +101,13 @@ def claves_refacturadas(comps: List[dict]) -> set:
     artículo el mismo día por el mismo importe exacto y rechazó una. Por eso los
     rechazos se marcan `excluido` con razón 'refacturacion' y quedan guardados,
     en vez de descartarse.
+
+    Devuelve claves `(id_cliente, id_articulo, bultos_rechazados)`. Se
+    identifica así y no por `linea_key` porque esta función también se usa para
+    marcar el histórico, y la `linea_key` de las filas cargadas en mayo se armó
+    con otra versión del código: no matchea. Estos tres campos son estables.
+    ⚠️ Si el mismo cliente rechazara el mismo artículo y la misma cantidad en
+    dos comprobantes distintos del mismo día, se marcarían los dos.
     """
     positivas: Dict[tuple, List[dict]] = {}
     for c in comps:
@@ -116,8 +123,7 @@ def claves_refacturadas(comps: List[dict]) -> set:
                    if abs(_num(m.get("cantidadesTotal")) - crech) < 0.01
                    and abs(abs(_num(m.get("subtotalNeto"))) - neto) < 1]
         if len(espejos) >= 2:
-            out.add(f"{_txt(c.get('idDocumento'))}-{_txt(c.get('letra'))}-{_txt(c.get('serie'))}"
-                    f"-{_txt(c.get('nrodoc'))}-L{_txt(c.get('idLinea'))}")
+            out.add((_txt(c.get("idCliente")), _txt(c.get("idArticulo")), round(crech, 4)))
     return out
 
 
@@ -339,9 +345,8 @@ def _chess_rows(comprobantes: List[dict], clientes: dict, vend_sup: dict) -> Lis
             continue  # linea no rechazada
         transporte = _txt(c.get("dsFleteroCarga"))
         razon = _razon_exclusion(motivo, transporte, _txt(c.get("dsVendedor")))
-        lkey = (f"{_txt(c.get('idDocumento'))}-{_txt(c.get('letra'))}-{_txt(c.get('serie'))}"
-                f"-{_txt(c.get('nrodoc'))}-L{_txt(c.get('idLinea'))}")
-        if not razon and lkey in refac:
+        if not razon and (_txt(c.get("idCliente")), _txt(c.get("idArticulo")),
+                          round(abs(crech), 4)) in refac:
             razon = "refacturacion"
         ctot = _num(c.get("cantidadesTotal"))
         sneto = abs(_num(c.get("subtotalNeto")))
@@ -384,7 +389,8 @@ def _chess_rows(comprobantes: List[dict], clientes: dict, vend_sup: dict) -> Lis
             "hl_rechazados": round(hl, 5),
             "importe_rechazado": round(importe, 2),
             "raw": json.dumps(c, default=str, ensure_ascii=False),
-            "linea_key": lkey,
+            "linea_key": f"{_txt(c.get('idDocumento'))}-{_txt(c.get('letra'))}-{_txt(c.get('serie'))}"
+                         f"-{_txt(c.get('nrodoc'))}-L{_txt(c.get('idLinea'))}",
         })
     return out
 
@@ -757,13 +763,15 @@ def marcar_refacturaciones(desde: str, hasta: str) -> Dict[str, int]:
             total["detectados"] += len(claves)
             if claves:
                 cur = conn.cursor()
-                cur.execute(
-                    """UPDATE rechazos
-                          SET excluido = true, motivo_exclusion = 'refacturacion'
-                        WHERE fuente = 'CHESS' AND fecha = %s
-                          AND linea_key = ANY(%s) AND excluido = false""",
-                    (fecha, list(claves)))
-                total["marcados"] += cur.rowcount
+                for idcli, idart, bultos in claves:
+                    cur.execute(
+                        """UPDATE rechazos
+                              SET excluido = true, motivo_exclusion = 'refacturacion'
+                            WHERE fuente = 'CHESS' AND fecha = %s AND excluido = false
+                              AND id_cliente = %s AND id_articulo = %s
+                              AND ROUND(bultos_rechazados, 4) = %s""",
+                        (fecha, idcli, idart, bultos))
+                    total["marcados"] += cur.rowcount
                 conn.commit()
             log.info("Refacturaciones %s: %d detectadas (%s)", fecha, len(claves), total)
             d += timedelta(days=1)

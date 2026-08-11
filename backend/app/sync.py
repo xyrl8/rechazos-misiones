@@ -75,6 +75,52 @@ def es_reparto_camion(transporte: str) -> bool:
     return bool(_PATENTE_RE.match(re.sub(r"[^A-Z0-9]", "", t)))
 
 
+def claves_refacturadas(comps: List[dict]) -> set:
+    """Rechazos de un día que en realidad son una REFACTURACIÓN, no un rechazo.
+
+    Cuando se factura mal, Chess emite una nota de crédito que anula la factura
+    y vuelve a facturar lo mismo. La NC lleva `cantidadesRechazo`, así que entra
+    como rechazo — pero la mercadería nunca volvió: el cliente se quedó con
+    ella. Criterio de Enzo (2026-08-11): eso no es rechazo.
+
+    🚨 Cómo se distingue de un rechazo de verdad. Los dos casos tienen una NC y
+    una factura espejo del mismo importe: esa factura es, justamente, la que la
+    NC anula. Lo que cambia es cuántas hay:
+
+        rechazo real     NC −1 × $28.764  +  FACTURA +1 × $28.764        (neto 0)
+        refacturación    NC −300 × $7,1M  +  FACTURA +300 × $7,1M
+                                          +  FACTURA +300 × $7,1M        (neto +300)
+
+    O sea: se exige **dos o más** líneas positivas con la misma cantidad y el
+    mismo importe (al peso) para el mismo cliente y artículo del día. Una sola
+    es el rechazo normal y NO se toca.
+
+    Medido sobre 2026 completo: 170 casos, 71,8 HL = 7% del rechazo del año (el
+    60% de eso cae en enero, casi todo un evento del 27/01).
+    ⚠️ Puede haber falso positivo si un cliente compró dos veces el mismo
+    artículo el mismo día por el mismo importe exacto y rechazó una. Por eso los
+    rechazos se marcan `excluido` con razón 'refacturacion' y quedan guardados,
+    en vez de descartarse.
+    """
+    positivas: Dict[tuple, List[dict]] = {}
+    for c in comps:
+        if _num(c.get("cantidadesTotal")) > 0 and not _num(c.get("cantidadesRechazo")):
+            positivas.setdefault((_txt(c.get("idCliente")), _txt(c.get("idArticulo"))), []).append(c)
+    out = set()
+    for c in comps:
+        crech = abs(_num(c.get("cantidadesRechazo")))
+        neto = abs(_num(c.get("subtotalNeto")))
+        if not crech or neto <= 0:
+            continue
+        espejos = [m for m in positivas.get((_txt(c.get("idCliente")), _txt(c.get("idArticulo"))), [])
+                   if abs(_num(m.get("cantidadesTotal")) - crech) < 0.01
+                   and abs(abs(_num(m.get("subtotalNeto"))) - neto) < 1]
+        if len(espejos) >= 2:
+            out.add(f"{_txt(c.get('idDocumento'))}-{_txt(c.get('letra'))}-{_txt(c.get('serie'))}"
+                    f"-{_txt(c.get('nrodoc'))}-L{_txt(c.get('idLinea'))}")
+    return out
+
+
 def _normaliza_motivo(motivo: str) -> str:
     """Quita el prefijo de la app BEES ("BEES - XXX" -> "XXX").
 
@@ -96,7 +142,8 @@ def _razon_exclusion(motivo: str, transporte: str, vendedor: str = "") -> str:
 
     Los rechazos excluidos se guardan igual en la base, marcados con `excluido`
     y esta razón; los endpoints del tablero los filtran. Razones: 'motivo',
-    'transporte', 'promotor'.
+    'transporte', 'promotor' y 'refacturacion' (esta última no se decide acá:
+    necesita el día completo, la resuelve `claves_refacturadas`).
     """
     m = (motivo or "").strip().upper()
     if any(m.startswith(p) for p in MOTIVO_EXCLUIR_PREFIJOS):
@@ -282,6 +329,9 @@ def _load_ref(conn):
 # --------------------------------------------------------------------------
 def _chess_rows(comprobantes: List[dict], clientes: dict, vend_sup: dict) -> List[dict]:
     out = []
+    # Refacturaciones: se resuelve por día completo, mirando TODAS las líneas
+    # (una refacturación se reconoce por las facturas espejo, no por la línea).
+    refac = claves_refacturadas(comprobantes)
     for c in comprobantes:
         crech = _num(c.get("cantidadesRechazo"))
         motivo = _txt(c.get("dsRechazo"))
@@ -289,6 +339,10 @@ def _chess_rows(comprobantes: List[dict], clientes: dict, vend_sup: dict) -> Lis
             continue  # linea no rechazada
         transporte = _txt(c.get("dsFleteroCarga"))
         razon = _razon_exclusion(motivo, transporte, _txt(c.get("dsVendedor")))
+        lkey = (f"{_txt(c.get('idDocumento'))}-{_txt(c.get('letra'))}-{_txt(c.get('serie'))}"
+                f"-{_txt(c.get('nrodoc'))}-L{_txt(c.get('idLinea'))}")
+        if not razon and lkey in refac:
+            razon = "refacturacion"
         ctot = _num(c.get("cantidadesTotal"))
         sneto = abs(_num(c.get("subtotalNeto")))
         importe = sneto * abs(crech) / abs(ctot) if ctot else sneto
@@ -330,8 +384,7 @@ def _chess_rows(comprobantes: List[dict], clientes: dict, vend_sup: dict) -> Lis
             "hl_rechazados": round(hl, 5),
             "importe_rechazado": round(importe, 2),
             "raw": json.dumps(c, default=str, ensure_ascii=False),
-            "linea_key": f"{_txt(c.get('idDocumento'))}-{_txt(c.get('letra'))}-{_txt(c.get('serie'))}"
-                         f"-{_txt(c.get('nrodoc'))}-L{_txt(c.get('idLinea'))}",
+            "linea_key": lkey,
         })
     return out
 
@@ -675,6 +728,46 @@ def sync_dia(fecha: str, fuentes: List[str] = None) -> Dict[str, int]:
                 raise
 
         return resultado
+    finally:
+        conn.close()
+
+
+def marcar_refacturaciones(desde: str, hasta: str) -> Dict[str, int]:
+    """Marca como 'refacturacion' los rechazos del histórico que lo sean.
+
+    Sólo hace UPDATE del flag `excluido` sobre las filas que ya están cargadas:
+    NO borra ni reinserta `rechazos`, así que no puede mover ningún otro número
+    ya publicado. Es idempotente y necesita volver a pedirle el día a Chess
+    porque la detección mira las líneas de VENTA, que la tabla no guarda.
+
+    Sólo marca; nunca desmarca. Un rechazo excluido por otra razón (mostrador,
+    DEV X TRAM, transporte) se deja como está: su razón original es más
+    específica.
+    """
+    d0 = datetime.strptime(desde, "%Y-%m-%d").date()
+    d1 = datetime.strptime(hasta, "%Y-%m-%d").date()
+    total = {"dias": 0, "detectados": 0, "marcados": 0}
+    conn = get_conn()
+    try:
+        d = d0
+        while d <= d1:
+            fecha = d.isoformat()
+            claves = claves_refacturadas(ChessClient().get_ventas_detalladas(fecha))
+            total["dias"] += 1
+            total["detectados"] += len(claves)
+            if claves:
+                cur = conn.cursor()
+                cur.execute(
+                    """UPDATE rechazos
+                          SET excluido = true, motivo_exclusion = 'refacturacion'
+                        WHERE fuente = 'CHESS' AND fecha = %s
+                          AND linea_key = ANY(%s) AND excluido = false""",
+                    (fecha, list(claves)))
+                total["marcados"] += cur.rowcount
+                conn.commit()
+            log.info("Refacturaciones %s: %d detectadas (%s)", fecha, len(claves), total)
+            d += timedelta(days=1)
+        return total
     finally:
         conn.close()
 

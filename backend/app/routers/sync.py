@@ -12,7 +12,8 @@ from fastapi.responses import StreamingResponse
 
 from app.config import settings
 from app.db import get_conn
-from app.sync import sync_rango, sync_referencias, sync_ventas_rango
+from app.sync import (marcar_refacturaciones, sync_rango, sync_referencias,
+                      sync_ventas_rango)
 
 log = logging.getLogger("sync.router")
 router = APIRouter(prefix="/api/sync", tags=["sync"])
@@ -238,6 +239,25 @@ def _stream(trabajo):
         yield "\n" + json.dumps(resultado) + "\n"
 
     return StreamingResponse(gen(), media_type="text/plain")
+
+
+@router.post("/refacturaciones")
+def sync_refacturaciones(
+    desde: str = Query(..., description="yyyy-MM-dd"),
+    hasta: str = Query(..., description="yyyy-MM-dd"),
+    x_sync_secret: Optional[str] = Header(None),
+    secret: Optional[str] = Query(None),
+):
+    """Marca las refacturaciones del histórico, en streaming.
+
+    Sólo hace UPDATE del flag sobre los rechazos ya cargados (ver
+    `marcar_refacturaciones`): no reescribe la tabla, así que ningún otro número
+    publicado se mueve. Para el día a día no hace falta: el sync normal ya los
+    marca al cargarlos.
+    """
+    _check_secret(x_sync_secret, secret)
+    log.info("Marcando refacturaciones %s..%s", desde, hasta)
+    return _stream(lambda: marcar_refacturaciones(desde, hasta))
 
 
 @router.post("/ventas")

@@ -55,14 +55,19 @@ SQL_REPARTO_CAMION = (
 )
 
 # Motivos imputables a PREVENTA. Es la vista "VENDEDORES" del PBI, y es contra
-# ella que se mide el objetivo del 1,29%. La lista se dedujo del PBI publicado
-# (⏳ falta que Quilmes confirme la oficial). Los motivos llegan normalizados
-# por el sync (sin el prefijo "BEES - ").
-# 🚨 Lista BLANCA a proposito: un motivo nuevo cae en DISTRIBUCION, no en
-# VENTAS. Es preferible subestimar lo imputable a preventa que atribuirle algo
-# que nadie decidio.
+# ella que se mide el objetivo del 1,29%. Los motivos llegan normalizados por el
+# sync (sin el prefijo "BEES - ").
+# ✅ VERIFICADA contra el PBI (2026-08-11): son exactamente los 8 que quedan al
+# apretar VENDEDORES sobre el acumulado del año (468,25 HL / 0,93%).
+# 🚨 MAL FACTURADO y ERROR DE PRECIOS entran acá aunque suenen administrativos:
+# el PBI los imputa a ventas. No estaban en la primera version de esta lista
+# porque se dedujo mirando SOLO la quincena 01-15/05, donde los dos dan cero.
+# 🚨 Sigue siendo lista BLANCA: un motivo nuevo cae en DISTRIBUCION. Es
+# preferible subestimar lo imputable a preventa que atribuirle algo que nadie
+# decidio.
 MOTIVOS_VENTAS = {"SIN DINERO", "ERROR DE PREVENTA", "FECHA CORTA", "NO PEDIDO",
-                  "PEDIDO DUPLICADO", "SIN ENVASES"}
+                  "PEDIDO DUPLICADO", "SIN ENVASES", "MAL FACTURADO",
+                  "ERROR DE PRECIOS"}
 
 # Objetivo del PBI para el % de rechazo (vista VENDEDORES). Viaja al frontend
 # para dibujar la linea de referencia.

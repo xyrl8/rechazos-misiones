@@ -42,6 +42,18 @@ UNIDADES = [("bultos", "bultos_rechazados", "bultos"),
 # 01-15/05/2026: 66,8 HL / 3.232 HL = 2,07% (el PBI publica 2,08%).
 DENOMINADORES = {"total": "", "reparto": "_reparto"}
 
+# 🚨 Con `denominador=reparto` el NUMERADOR tambien se acota a lo que salio en
+# camion propio: si no, se cuentan rechazos de mostrador (GESCOM) contra un
+# denominador que no los tiene y el % se infla (01-15/05: 3,20% en vez de
+# 2,07%). Es la version SQL de `sync.es_reparto_camion()` — mismo criterio:
+# quitar el sufijo ".2" de la segunda vuelta, sacar separadores y exigir patente
+# vieja (ABC123) o Mercosur (AB123CD). Los rechazos de GESCOM no tienen patente,
+# asi que quedan afuera solos.
+SQL_REPARTO_CAMION = (
+    "upper(regexp_replace(split_part(transporte, '.', 1), '[^A-Za-z0-9]', '', 'g'))"
+    " ~ '^([A-Z]{3}[0-9]{3}|[A-Z]{2}[0-9]{3}[A-Z]{2})$'"
+)
+
 # Motivos imputables a PREVENTA. Es la vista "VENDEDORES" del PBI, y es contra
 # ella que se mide el objetivo del 1,29%. La lista se dedujo del PBI publicado
 # (⏳ falta que Quilmes confirme la oficial). Los motivos llegan normalizados
@@ -57,8 +69,11 @@ MOTIVOS_VENTAS = {"SIN DINERO", "ERROR DE PREVENTA", "FECHA CORTA", "NO PEDIDO",
 OBJETIVO_PCT = 1.29
 
 
-def _where_rechazos(fuente, desde, hasta, supervisor, vendedor, motivo, vista="todos"):
+def _where_rechazos(fuente, desde, hasta, supervisor, vendedor, motivo, vista="todos",
+                    solo_reparto=False):
     where, params = ["excluido = false", "fecha >= %s", "fecha <= %s"], [desde, hasta]
+    if solo_reparto:
+        where.append(SQL_REPARTO_CAMION)
     if vista == "ventas":
         where.append("motivo = ANY(%s)")
         params.append(sorted(MOTIVOS_VENTAS))
@@ -134,7 +149,8 @@ def mensual(
     vista = vista if vista in ("todos", "ventas", "distribucion") else "todos"
     suf = DENOMINADORES[denominador]
 
-    w_r, p_r = _where_rechazos(fuente, desde, hasta, supervisor, vendedor, motivo, vista)
+    w_r, p_r = _where_rechazos(fuente, desde, hasta, supervisor, vendedor, motivo, vista,
+                               solo_reparto=(denominador == "reparto"))
     w_v, p_v = _where_ventas(fuente, desde, hasta, supervisor, vendedor)
 
     conn = get_conn()

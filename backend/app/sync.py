@@ -28,7 +28,7 @@ RECHAZO_COLS = [
     "id_vendedor", "vendedor", "id_ruta", "ruta", "dias_visita",
     "id_cliente", "cliente",
     "localidad", "domicilio", "id_articulo", "articulo", "canal", "origen",
-    "transporte", "excluido", "motivo_exclusion",
+    "transporte", "excluido", "motivo_exclusion", "refacturacion",
     "bultos_rechazados", "hl_rechazados", "importe_rechazado", "raw", "linea_key",
 ]
 
@@ -345,9 +345,8 @@ def _chess_rows(comprobantes: List[dict], clientes: dict, vend_sup: dict) -> Lis
             continue  # linea no rechazada
         transporte = _txt(c.get("dsFleteroCarga"))
         razon = _razon_exclusion(motivo, transporte, _txt(c.get("dsVendedor")))
-        if not razon and (_txt(c.get("idCliente")), _txt(c.get("idArticulo")),
-                          round(abs(crech), 4)) in refac:
-            razon = "refacturacion"
+        es_refac = (_txt(c.get("idCliente")), _txt(c.get("idArticulo")),
+                    round(abs(crech), 4)) in refac
         ctot = _num(c.get("cantidadesTotal"))
         sneto = abs(_num(c.get("subtotalNeto")))
         importe = sneto * abs(crech) / abs(ctot) if ctot else sneto
@@ -385,6 +384,9 @@ def _chess_rows(comprobantes: List[dict], clientes: dict, vend_sup: dict) -> Lis
             "transporte": transporte,
             "excluido": bool(razon),
             "motivo_exclusion": razon,
+            # NO entra en `excluido`: la solapa 1 (detalle operativo) los sigue
+            # mostrando. Solo el % de la solapa 2 los descuenta.
+            "refacturacion": es_refac,
             "bultos_rechazados": abs(crech),
             "hl_rechazados": round(hl, 5),
             "importe_rechazado": round(importe, 2),
@@ -741,14 +743,15 @@ def sync_dia(fecha: str, fuentes: List[str] = None) -> Dict[str, int]:
 def marcar_refacturaciones(desde: str, hasta: str) -> Dict[str, int]:
     """Marca como 'refacturacion' los rechazos del histórico que lo sean.
 
-    Sólo hace UPDATE del flag `excluido` sobre las filas que ya están cargadas:
-    NO borra ni reinserta `rechazos`, así que no puede mover ningún otro número
-    ya publicado. Es idempotente y necesita volver a pedirle el día a Chess
-    porque la detección mira las líneas de VENTA, que la tabla no guarda.
+    Sólo hace UPDATE de la columna `refacturacion` sobre las filas que ya están
+    cargadas: NO borra ni reinserta `rechazos`, así que no puede mover ningún
+    otro número ya publicado. Es idempotente y necesita volver a pedirle el día
+    a Chess porque la detección mira las líneas de VENTA, que la tabla no
+    guarda.
 
-    Sólo marca; nunca desmarca. Un rechazo excluido por otra razón (mostrador,
-    DEV X TRAM, transporte) se deja como está: su razón original es más
-    específica.
+    🚨 No toca `excluido`: estos eventos siguen visibles en el detalle operativo
+    de la solapa 1 (pedido de Enzo, 2026-08-11). El descuento se aplica sólo en
+    el % de la solapa 2.
     """
     d0 = datetime.strptime(desde, "%Y-%m-%d").date()
     d1 = datetime.strptime(hasta, "%Y-%m-%d").date()
@@ -766,8 +769,9 @@ def marcar_refacturaciones(desde: str, hasta: str) -> Dict[str, int]:
                 for idcli, idart, bultos in claves:
                     cur.execute(
                         """UPDATE rechazos
-                              SET excluido = true, motivo_exclusion = 'refacturacion'
-                            WHERE fuente = 'CHESS' AND fecha = %s AND excluido = false
+                              SET refacturacion = true
+                            WHERE fuente = 'CHESS' AND fecha = %s
+                              AND refacturacion = false
                               AND id_cliente = %s AND id_articulo = %s
                               AND ROUND(bultos_rechazados, 4) = %s""",
                         (fecha, idcli, idart, bultos))

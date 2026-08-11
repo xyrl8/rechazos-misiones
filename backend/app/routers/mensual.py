@@ -78,7 +78,12 @@ OBJETIVO_PCT = 1.29
 
 def _where_rechazos(fuente, desde, hasta, supervisor, vendedor, motivo, vista="todos",
                     solo_reparto=False):
-    where, params = ["excluido = false", "fecha >= %s", "fecha <= %s"], [desde, hasta]
+    # `refacturacion` se filtra SOLO acá: la NC anula una factura que se volvió a
+    # emitir, así que no es rechazo para la medición. En la solapa 1 esos
+    # eventos siguen a la vista — un problema de facturación es algo que el
+    # vendedor igual quiere hablar con el cliente.
+    where, params = ["excluido = false", "refacturacion = false",
+                     "fecha >= %s", "fecha <= %s"], [desde, hasta]
     if solo_reparto:
         where.append(SQL_REPARTO_CAMION)
     if vista == "ventas":

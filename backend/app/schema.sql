@@ -144,6 +144,22 @@ CREATE INDEX IF NOT EXISTS idx_rechazo_coment_thread ON rechazo_comentarios (thr
 ALTER TABLE rechazos      ADD COLUMN IF NOT EXISTS hl_rechazados NUMERIC NOT NULL DEFAULT 0;
 ALTER TABLE ref_articulos ADD COLUMN IF NOT EXISTS hl_bulto      NUMERIC;
 
+-- Refacturacion: la NC anula una factura que se volvio a emitir, asi que la
+-- mercaderia nunca volvio (ver `claves_refacturadas` en sync.py).
+-- 🚨 Columna PROPIA y no `excluido` a proposito: `excluido` lo filtran TODOS los
+-- endpoints, y eso sacaba estos eventos tambien del detalle operativo de la
+-- solapa 1, que es para ir a hablar con el cliente. Un problema de facturacion
+-- ahi sigue siendo algo que el vendedor quiere ver. Solo el % de la solapa 2 lo
+-- descuenta.
+ALTER TABLE rechazos ADD COLUMN IF NOT EXISTS refacturacion BOOLEAN NOT NULL DEFAULT false;
+
+-- Migracion (2026-08-11): las primeras refacturaciones se marcaron con
+-- `excluido`; se pasan a la columna propia. Idempotente: despues de correr no
+-- queda ninguna fila con esa razon.
+UPDATE rechazos
+   SET refacturacion = true, excluido = false, motivo_exclusion = ''
+ WHERE motivo_exclusion = 'refacturacion';
+
 -- Denominador del % de rechazo: la VENTA del dia (bruta, antes de la nota de
 -- credito). Sale de las mismas lineas que ya baja el sync (las de cantidad
 -- positiva); las negativas son NC / devoluciones, o sea el propio rechazo.
